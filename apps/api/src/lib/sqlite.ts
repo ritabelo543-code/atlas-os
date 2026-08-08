@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { dirname } from "node:path";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import type { CollectionStore } from "@atlas/core";
 
 export function createSqliteStore<T>(databasePath: string, collection: string): CollectionStore<T> {
@@ -17,3 +17,5 @@ export function createSqliteStore<T>(databasePath: string, collection: string): 
     close() { db.close(); },
   };
 }
+
+export async function migrateJsonIntoEmptyStore<T>(store: CollectionStore<T>, legacyFile: string): Promise<number> { if (!existsSync(legacyFile) || (await store.load()).length) return 0; const items = JSON.parse(readFileSync(legacyFile, "utf8")) as T[]; if (items.length) await store.save(items); return items.length; }

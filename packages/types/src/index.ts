@@ -6,10 +6,12 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 export type Project = {
   id: string; name: string; description: string; status: ProjectStatus;
   createdAt: string; updatedAt: string;
+  ownerId?: string;
 };
 export type Task = {
   id: string; projectId: string; title: string; completed: boolean;
   priority: TaskPriority; dueDate: string | null; createdAt: string; updatedAt: string;
+  ownerId?: string;
 };
 export type CreateProjectInput = Pick<Project, "name" | "description">;
 export type UpdateProjectInput = Partial<Pick<Project, "name" | "description" | "status">>;

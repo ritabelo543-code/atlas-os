@@ -1,6 +1,8 @@
 # Atlas OS
 
-Atlas OS é um Mission Control local: recebe uma missão, recupera conhecimento relevante, gera uma decisão estruturada e mantém o histórico e a auditoria do fluxo.
+Atlas OS é o sistema operacional de uma empresa digital automatizada. Ele pesquisa oportunidades, escolhe produtos e estratégias, coordena execução, marketing e conteúdo, mede resultados, aprende com desempenho e escala iniciativas lucrativas.
+
+O Mission Control, os agentes, Knowledge, Memory, Decision Engine, Guardian e plugins existem para fortalecer o ciclo comercial: mercado → pesquisa → oportunidade → planejamento → execução → distribuição → medição → aprendizado → otimização → escala → lucro.
 
 ## Executar localmente
 
@@ -19,11 +21,11 @@ Para apontar a Web para outra API, copie `apps/web/.env.example` para `apps/web/
 
 ## Atlas v0.4
 
-O painel interno fica em `http://localhost:3000/operation`. Ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins.
+O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.
 
 Providers reconhecidos: `mock`, `openai`, `claude`, `gemini`, `deepseek` e `ollama`. A v0.2 usa o protocolo OpenAI-compatible; Claude nativo exige um gateway compatível. O provider e o modelo efetivamente usados aparecem na decisão e na auditoria, sem exposição da chave.
 
-Cada missão concluída gera uma memória persistente em JSON com origem, missão, resumo, conteúdo, confiança, relevância, tags e timestamps. Missões posteriores recuperam registros relacionados por busca lexical. O MVP evita conteúdo idêntico, remove memórias temporárias expiradas e mantém no máximo 500 itens; as gravações preservam a escrita atômica e o backup `.bak`.
+Cada missão concluída gera memória persistente no SQLite com origem, missão, resumo, conteúdo, confiança, relevância, tags e timestamps. Missões posteriores recuperam registros relacionados por busca semântica local. O sistema evita conteúdo idêntico, remove memórias temporárias expiradas e mantém no máximo 500 itens.
 
 ### Fluxos
 
@@ -32,15 +34,15 @@ Cada missão concluída gera uma memória persistente em JSON com origem, missã
 - Decisão: recomendação → alternativas comparáveis por impacto, custo, risco e confiança → plano de execução.
 - Plugins: Permission Manager valida capacidades → Plugin Runtime carrega/descarrega versões → plugin GitHub consulta repositórios, PRs e issues e registra histórico.
 
-O plugin GitHub opera em leitura para dados públicos sem credencial. Defina `GITHUB_TOKEN` apenas para repositórios privados ou maior limite de API; sua ausência não bloqueia o Atlas.
+O plugin GitHub é preservado apenas como ferramenta auxiliar de desenvolvimento e não integra a prioridade comercial do produto. As integrações futuras devem priorizar pesquisa de mercado, afiliados, conteúdo, distribuição, anúncios e analytics.
 
 ### Autenticação e multiusuário
 
-A primeira conta criada recebe papel `admin`; as seguintes recebem `member`. Senhas são derivadas com `scrypt`, nunca armazenadas em texto, e as sessões usam tokens HMAC com validade de 24 horas. Defina `AUTH_SECRET` em ambientes compartilhados. Missões, decisões, memórias e conhecimento são filtrados pelo proprietário autenticado.
+A primeira conta criada recebe papel `admin`; as seguintes recebem `member`. Senhas são derivadas com `scrypt`, nunca armazenadas em texto, e as sessões usam tokens HMAC com validade de 24 horas. Defina `AUTH_SECRET` em ambientes compartilhados. Missões, decisões, memórias, conhecimento, projetos e tarefas são filtrados pelo proprietário autenticado.
 
 ### Persistência transacional
 
-O armazenamento padrão é SQLite nativo em `apps/api/data/atlas.db`, com WAL e transações `BEGIN IMMEDIATE/COMMIT/ROLLBACK`. Na primeira inicialização, os JSON legados são importados automaticamente quando o banco ainda não existe; os arquivos originais permanecem intactos.
+O armazenamento padrão é SQLite nativo em `apps/api/data/atlas.db`, com WAL e transações `BEGIN IMMEDIATE/COMMIT/ROLLBACK`. Na primeira inicialização, os JSON legados são importados automaticamente; os arquivos originais permanecem intactos. Projects e Tasks antigos sem proprietário são atribuídos ao primeiro administrador existente ou criado, pois o formato legado não registra autoria.
 
 ### Busca semântica local
 

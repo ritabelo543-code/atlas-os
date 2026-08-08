@@ -51,21 +51,21 @@ export class PluginRuntime {
   private mustPlugin(id: string): AtlasPlugin { const plugin = this.plugins.get(id); if (!plugin) throw new Error(`Plugin not registered: ${id}`); return plugin; }
 }
 
-export type GitHubHistoryEntry = { timestamp: string; action: string; repository: string };
+export type GitHubHistoryEntry = { timestamp: string; action: string; repository: string; ownerId?: string };
 export class GitHubPlugin implements AtlasPlugin {
   manifest: PluginManifest = { id: "github", name: "GitHub", version: "1.0.0", enabled: false, status: "unloaded", capabilities: ["repositories.read", "pull_requests.read", "issues.read"], permissions: ["network.github.read"] };
   private readonly history: GitHubHistoryEntry[] = [];
   constructor(private readonly token?: string, private readonly apiUrl = "https://api.github.com") {}
   async load(): Promise<void> {}
   async unload(): Promise<void> {}
-  listHistory(): GitHubHistoryEntry[] { return this.history.map((item) => ({ ...item })); }
-  repositories(owner: string): Promise<unknown> { return this.request(`/users/${encodeURIComponent(owner)}/repos`, "repositories", owner); }
-  pullRequests(owner: string, repo: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`, "pull_requests", `${owner}/${repo}`); }
-  issues(owner: string, repo: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, "issues", `${owner}/${repo}`); }
-  private async request(path: string, action: string, repository: string): Promise<unknown> {
+  listHistory(ownerId?: string): GitHubHistoryEntry[] { return this.history.filter((item) => !ownerId || item.ownerId === ownerId).map((item) => ({ ...item })); }
+  repositories(owner: string, ownerId?: string): Promise<unknown> { return this.request(`/users/${encodeURIComponent(owner)}/repos`, "repositories", owner, ownerId); }
+  pullRequests(owner: string, repo: string, ownerId?: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`, "pull_requests", `${owner}/${repo}`, ownerId); }
+  issues(owner: string, repo: string, ownerId?: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, "issues", `${owner}/${repo}`, ownerId); }
+  private async request(path: string, action: string, repository: string, ownerId?: string): Promise<unknown> {
     if (!this.manifest.enabled) throw new Error("GitHub plugin is not loaded");
     const response = await fetch(`${this.apiUrl}${path}`, { headers: { accept: "application/vnd.github+json", "user-agent": "atlas-os", ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) } });
     if (!response.ok) throw new Error(`GitHub request failed (${response.status})`);
-    this.history.unshift({ timestamp: new Date().toISOString(), action, repository }); return response.json();
+    this.history.unshift({ timestamp: new Date().toISOString(), action, repository, ownerId }); return response.json();
   }
 }
