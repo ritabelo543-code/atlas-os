@@ -10,6 +10,22 @@ O Atlas OS deve operar uma empresa digital autônoma: pesquisar mercados e nicho
 
 A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, persistência, autenticação e runtimes são fundações válidas. Mission Control, Atlas Operation, Knowledge, Memory, Decision Engine, agentes, plugins, prompts e contratos de missão ainda precisam ser orientados a resultados comerciais. GitHub e agentes de TI permanecem apenas como legado auxiliar, sem prioridade no roadmap do produto.
 
+## Sprint v0.5 — CONCLUÍDA
+
+- Modelo comercial para pesquisas, evidências, sinais, ofertas e oportunidades, com origem e natureza do dado explícitas.
+- Trend Hunter Agent e Market Research Agent executados pelo Agent Runtime, protegidos por permissões e auditados pelo Guardian.
+- Motor configurado centralmente em `market-score-v1`, com dez componentes e penalidades transparentes para concorrência, esforço e risco.
+- Persistência SQLite transacional e isolamento por proprietário em todos os endpoints de mercado.
+- Mission Control prioriza criação de pesquisas e ranking de oportunidades; missões operacionais continuam disponíveis como suporte.
+- Fluxo demonstrável usa fixtures explicitamente `simulated`; não há alegação de coleta externa real.
+
+### Validação v0.5
+
+- Core: 7 testes aprovados; API: 11 testes aprovados.
+- Regras comerciais, pontuação, rastreabilidade, auditoria e isolamento multiusuário aprovados.
+- Builds do Core, API, Web e monorepo aprovados.
+- Smoke autenticado criou uma pesquisa simulada, 1 sinal, 1 oferta e 1 oportunidade, recuperou o ranking e o histórico após persistência.
+
 ## Sprint v0.4 — CONCLUÍDA
 
 - Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
@@ -115,6 +131,6 @@ Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponí
 - Não há recuperação de senha, MFA ou autenticação federada; exposição pública exige essas camadas adicionais.
 - A UI prioriza o fluxo de missão; projetos e tarefas continuam disponíveis na API, mas não são o foco da tela atual.
 
-## Próxima etapa pós-MVP
+## Próxima etapa
 
-Adicionar recuperação de conta, MFA, autenticação federada, PostgreSQL distribuído e observabilidade antes de produção pública.
+v0.6 — Conteúdo Automatizado, sempre vinculado a uma oportunidade, produto, público, canal e etapa de funil. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.

@@ -12,7 +12,7 @@ O Atlas OS existe para pesquisar oportunidades, escolher ofertas, executar marke
 - Autenticação, isolamento multiusuário, SQLite e busca contextual local.
 - GitHub preservado como integração auxiliar de desenvolvimento, sem prioridade de produto.
 
-## v0.5 — Pesquisa de Mercado Inteligente
+## v0.5 — Pesquisa de Mercado Inteligente — CONCLUÍDA
 
 - Market Research Agent e Trend Hunter Agent.
 - Radar de mercados, nichos, dores, tendências e oportunidades.

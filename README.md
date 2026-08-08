@@ -19,6 +19,22 @@ Sem configuração adicional, o Atlas usa o provider Mock determinístico. Para 
 
 Para apontar a Web para outra API, copie `apps/web/.env.example` para `apps/web/.env.local` e altere `NEXT_PUBLIC_API_URL`.
 
+## Atlas v0.5 — Pesquisa de Mercado Inteligente
+
+Após entrar, a tela principal permite registrar mercado, nicho, público, dor/desejo, fonte, evidência e uma oferta opcional. O Trend Hunter classifica sinais sem confundir toda popularidade com tendência; o Market Research Agent estrutura oportunidades e o motor `market-score-v1` compara demanda, intenção comercial, concorrência, monetização, margem, esforço, risco, qualidade das evidências, confiança e escala.
+
+O ranking mostra a composição e a justificativa. Dados `confirmed`, `estimated`, `calculated` e `simulated` permanecem explicitamente diferenciados. A v0.5 não consulta a internet por conta própria: fontes e métricas vêm da entrada autenticada ou de fixtures de teste, e nenhuma integração simulada é apresentada como real.
+
+Endpoints autenticados:
+
+- `POST /market/research`: executa a pesquisa e gera sinais, ofertas e oportunidades.
+- `GET /market/research`: recupera o histórico do usuário.
+- `GET /market/evidence`, `/market/signals` e `/market/offers`: recuperam fontes, sinais e produtos candidatos rastreáveis.
+- `GET /market/opportunities`: lista o ranking do usuário.
+- `GET /market/opportunities/:id`: recupera uma oportunidade sem vazar dados entre contas.
+
+As coleções `market_research`, `market_evidence`, `market_signals`, `market_offers` e `market_opportunities` são persistidas transacionalmente no mesmo SQLite. O Guardian registra autor, entradas principais, fontes, resultado, duração e versão da lógica.
+
 ## Atlas v0.4
 
 O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.

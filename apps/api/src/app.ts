@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
-import { GitHubPlugin, PluginRuntime, type AtlasCore } from "@atlas/core";
-import type { CreateMissionInput, CreateProjectInput, CreateTaskInput, HealthResponse, Project, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
+import { GitHubPlugin, MarketIntelligence, PluginRuntime, type AtlasCore } from "@atlas/core";
+import type { AffiliateOffer, CreateMarketResearchInput, CreateMissionInput, CreateProjectInput, CreateTaskInput, HealthResponse, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, Project, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -22,7 +22,7 @@ const taskBody = { type: "object", additionalProperties: false, required: ["titl
 const taskPatch = { type: "object", additionalProperties: false, minProperties: 1, properties: { ...taskBody.properties, completed: { type: "boolean" } } } as const;
 const missionBody = { type: "object", additionalProperties: false, required: ["title", "objective"], properties: { title: { type: "string", minLength: 1, maxLength: 160, pattern: "\\S" }, objective: { type: "string", minLength: 10, maxLength: 2000, pattern: "\\S" }, context: { type: "string", maxLength: 5000 } } } as const;
 
-export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; logger?: boolean };
+export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; logger?: boolean };
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: dependencies.logger ?? true, bodyLimit: 64 * 1024 });
@@ -35,6 +35,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const projects = dependencies.projects ?? new ProjectService(new ProjectRepository(projectStore!));
   const tasks = dependencies.tasks ?? new TaskService(new TaskRepository(taskStore!));
   const auth = dependencies.auth ?? new AuthService(createSqliteStore<StoredUser>(database, "users"), authSecret(database));
+  const market = dependencies.market ?? new MarketIntelligence({ research: createSqliteStore<MarketResearch>(database, "market_research"), evidence: createSqliteStore<MarketEvidence & { ownerId: string; researchId: string }>(database, "market_evidence"), signals: createSqliteStore<MarketSignal>(database, "market_signals"), offers: createSqliteStore<AffiliateOffer>(database, "market_offers"), opportunities: createSqliteStore<MarketOpportunity>(database, "market_opportunities") }, atlas.guardian, atlas.agentRuntime, atlas.permissions);
   const existingAdmin = await auth.firstAdmin(); if (existingAdmin) await Promise.all([projects.claimUnowned(existingAdmin.id), tasks.claimUnowned(existingAdmin.id)]);
   const authenticate = (authorization?: string) => { try { const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : ""; return token ? auth.verify(token) : null; } catch { return null; } };
   atlas.permissions.grant("plugin:github", ["network.github.read"]);
@@ -43,7 +44,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   plugins.register(github);
   await plugins.load("github");
   await atlas.start();
-  app.addHook("onClose", async () => { await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
+  app.addHook("onClose", async () => { market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
   const allowedOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
   await app.register(cors, { origin: allowedOrigin, methods: ["GET", "POST", "PATCH", "DELETE"] });
 
@@ -56,10 +57,10 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/health", async (_request, reply): Promise<HealthResponse> => {
     try {
       if (atlas.status().lifecycle !== "running") throw new Error("Atlas Core is not running");
-      return { status: "ok", service: "atlas-api", version: "0.4.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
+      return { status: "ok", service: "atlas-api", version: "0.5.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
     } catch (error) {
       app.log.error({ err: error }, "health storage check failed");
-      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "0.4.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
+      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "0.5.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
     }
   });
 
@@ -70,8 +71,8 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/atlas/status", async () => atlas.status());
   app.get("/atlas/operation", async (request, reply) => {
     const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 });
-    const [missions, decisions, knowledge, memory, audit] = await Promise.all([atlas.listMissions(user.id), atlas.listDecisions(user.id), atlas.listKnowledge(user.id), atlas.listMemory(user.id), atlas.listAudit()]);
-    return { status: atlas.status(), counts: { missions: missions.length, decisions: decisions.length, knowledge: knowledge.length, memory: memory.length, audit: audit.filter((entry) => entry.context.ownerId === user.id).length, agents: atlas.agentRuntime.listAgents().length, executions: atlas.agentRuntime.listExecutions().filter((item) => item.ownerId === user.id).length, plugins: plugins.list().length }, uptimeSeconds: Math.floor(process.uptime()), lastExecutionAt: decisions[0]?.createdAt ?? null };
+    const [missions, decisions, knowledge, memory, audit, opportunities, research] = await Promise.all([atlas.listMissions(user.id), atlas.listDecisions(user.id), atlas.listKnowledge(user.id), atlas.listMemory(user.id), atlas.listAudit(), market.listOpportunities(user.id), market.listResearch(user.id)]);
+    return { status: atlas.status(), counts: { opportunities: opportunities.length, research: research.length, missions: missions.length, decisions: decisions.length, knowledge: knowledge.length, memory: memory.length, audit: audit.filter((entry) => entry.context.ownerId === user.id).length, agents: atlas.agentRuntime.listAgents().length, executions: atlas.agentRuntime.listExecutions().filter((item) => item.ownerId === user.id).length, plugins: plugins.list().length }, uptimeSeconds: Math.floor(process.uptime()), lastExecutionAt: research[0]?.completedAt ?? decisions[0]?.createdAt ?? null };
   });
   app.get("/atlas/logs", async (request) => {
     const query = request.query as { module?: string; severity?: string; from?: string };
@@ -92,6 +93,13 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/atlas/events", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? (await atlas.listAudit()).filter((entry) => entry.context.ownerId === user.id).slice(0, 100) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.get("/atlas/performance", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); const executions = atlas.agentRuntime.listExecutions().filter((item) => item.ownerId === user.id); return { executions: executions.length, averageElapsedMs: executions.length ? Math.round(executions.reduce((sum, item) => sum + item.elapsedMs, 0) / executions.length) : 0, failures: executions.filter((item) => item.state === "failed").length, cancellations: executions.filter((item) => item.state === "cancelled").length }; });
   app.get("/atlas/config", async () => ({ provider: atlas.status().ai.provider, model: atlas.status().ai.model, temperature: Number(process.env.AI_TEMPERATURE ?? "0"), mockEnabled: atlas.status().ai.mode === "mock", variables: ["AI_PROVIDER", "AI_MODEL", "AI_TEMPERATURE", "AI_API_KEY", "AI_BASE_URL"].map((name) => ({ name, configured: Boolean(process.env[name]), secret: name.endsWith("KEY") })) }));
+  app.post<{ Body: CreateMarketResearchInput }>("/market/research", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); const body = request.body; if (!body?.query?.trim() || !body.market?.trim() || !body.niche?.trim() || !body.audience?.trim() || !body.painOrDesire?.trim() || !Array.isArray(body.evidence) || !body.evidence.length) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Market, niche, audience, pain/desire and evidence are required", statusCode: 400 }); try { return reply.code(201).send(await market.run(user.id, body)); } catch (error) { return reply.code(400).send({ error: "RESEARCH_ERROR", message: error instanceof Error ? error.message : "Research failed", statusCode: 400 }); } });
+  app.get("/market/research", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? market.listResearch(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.get("/market/evidence", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? market.listEvidence(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.get("/market/signals", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? market.listSignals(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.get("/market/offers", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? market.listOffers(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.get("/market/opportunities", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? market.listOpportunities(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.get<{ Params: { id: string } }>("/market/opportunities/:id", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return (await market.getOpportunity(request.params.id, user.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Opportunity not found", statusCode: 404 }); });
   app.get("/missions", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? atlas.listMissions(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.get<{ Params: { id: string } }>("/missions/:id", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return (await atlas.getMission(request.params.id, user.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Mission not found.", statusCode: 404 }); });
   app.post<{ Body: CreateMissionInput }>("/missions", { schema: { body: missionBody } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return reply.code(201).send(await atlas.createMission({ title: request.body.title.trim(), objective: request.body.objective.trim(), context: request.body.context?.trim() ?? "", ownerId: user.id })); });
