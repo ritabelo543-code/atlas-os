@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import type { Project, Task } from "@atlas/types";
 import type { AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
-import { AtlasCore, MockAiProvider } from "@atlas/core";
+import { AgentRuntime, AtlasCore, Guardian, MarketIntelligence, MockAiProvider, PermissionManager } from "@atlas/core";
 import { buildApp } from "../src/app.js";
 import type { JsonStore } from "../src/lib/storage.js";
 import { ProjectRepository } from "../src/repositories/ProjectRepository.js";
@@ -21,7 +21,8 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const tasks = new TaskService(new TaskRepository(memoryStore<Task>(initialTasks)));
   const atlas = new AtlasCore(new MockAiProvider(), { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
   const auth = new AuthService(memoryStore<StoredUser>(), "test-secret");
-  const app = await buildApp({ projects, tasks, atlas, auth, logger: false });
+  const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: memoryStore() }, new Guardian(memoryStore<AuditEntry>()), new AgentRuntime(), new PermissionManager());
+  const app = await buildApp({ projects, tasks, atlas, auth, market, logger: false });
   apps.push(app);
   return app;
 }
@@ -75,7 +76,13 @@ test("agent, plugin and performance operation endpoints expose v0.3 runtime", as
   assert.equal((await app.inject({ method: "GET", url: "/atlas/agents" })).json()[0].name, "Atlas Executive Agent");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/plugins" })).json()[0].status, "loaded");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/performance", headers })).json().executions, 0);
-  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "0.4.0");
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "0.5.0");
+});
+
+test("market research ranks traceable simulated opportunities and isolates users", async () => {
+  const app = await testApp(); const owner = await authHeaders(app, "market-owner@example.com"); const outsider = await authHeaders(app, "market-outsider@example.com");
+  const payload = { query: "automação para pequenas empresas", market: "Software", niche: "automação", audience: "pequenas empresas", painOrDesire: "economizar tempo", channels: ["SEO", "YouTube"], evidence: [{ source: "fixture:v0.5", observedAt: "2026-08-08T00:00:00.000Z", excerpt: "Sinal simulado de demanda crescente", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta Demo", provider: "fixture", commission: 30, commissionKind: "simulated", notes: "Somente demonstração" }], metrics: { demand: 85, commercialIntent: 75, competition: 45, monetization: 80, margin: 70, effort: 30, risk: 25, evidenceQuality: 80, confidence: 75, scalability: 85 }, dataKind: "simulated" };
+  const response = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload }); assert.equal(response.statusCode, 201); const opportunity = response.json().opportunities[0]; assert.equal(opportunity.dataKind, "simulated"); assert.ok(opportunity.score > 0); assert.match(opportunity.rankingRationale, /Demanda/); assert.equal((await app.inject({ method: "GET", url: "/market/opportunities", headers: owner })).json().length, 1); assert.equal((await app.inject({ method: "GET", url: "/market/opportunities", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: `/market/opportunities/${opportunity.id}`, headers: outsider })).statusCode, 404);
 });
 
 test("authentication isolates missions between users", async () => {
