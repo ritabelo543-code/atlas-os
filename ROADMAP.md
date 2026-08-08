@@ -56,8 +56,10 @@ O motor diferencia dados confirmados, calculados e simulados. Campanhas `dry_run
 
 Políticas, propostas, aprovação e simulação foram entregues. Execução financeira real permanece desativada; dados não confirmados e orçamento zero bloqueiam escala.
 
-## v1.0 — Empresa Autônoma
+## v1.0 — Empresa Autônoma — CONTROL PLANE CONCLUÍDO
 
 - Ciclo integrado: mercado → pesquisa → oportunidade → planejamento → execução → distribuição → medição → aprendizado → otimização → escala → lucro.
 - Coordenação entre agentes com metas comerciais, orçamento, permissões e auditoria.
 - Operação humana por exceção, com controles de segurança e aprovação para ações críticas.
+
+O Atlas COO coordena e avalia o ciclo completo, identifica gargalos e recomenda a próxima ação. A autonomia externa permanece bloqueada até existirem conectores reais, dados confirmados e orçamento autorizado.

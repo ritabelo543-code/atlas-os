@@ -110,3 +110,7 @@ export type ScaleAction = "scale" | "hold" | "stop";
 export type ScaleProposal = { id: string; ownerId: string; policyId: string; insightId: string; opportunityId: string; action: ScaleAction; rationale: string; currentBudget: number; proposedBudget: number; riskFlags: string[]; dataKind: EvidenceValueKind; status: "draft" | "approved" | "rejected" | "simulated"; createdAt: string; updatedAt: string; approvedAt?: string; simulatedAt?: string };
 export type CreateScalePolicyInput = Pick<ScalePolicy, "name" | "maxTotalBudget" | "maxDailyBudget" | "maxIncreasePercent" | "minRoiPercent" | "minConversions" | "maxCac"> & { requireConfirmedData?: boolean };
 export type CreateScaleProposalInput = { policyId: string; insightId: string; currentBudget: number };
+
+export type CompanyStageName = "research" | "content" | "distribution" | "measurement" | "learning" | "scaling";
+export type CompanyStage = { name: CompanyStageName; status: "ready" | "blocked" | "completed"; count: number; detail: string };
+export type CompanyCycle = { id: string; ownerId: string; mode: "safe"; status: "assessed" | "blocked" | "ready"; stages: CompanyStage[]; nextAction: string; blockers: string[]; externalPublishingEnabled: false; financialExecutionEnabled: false; createdAt: string };

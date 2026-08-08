@@ -79,6 +79,15 @@ O Scale Engine em `http://localhost:3000/scale` cria políticas financeiras, ava
 
 Nenhum endpoint executa pagamento, compra de mídia ou alteração de orçamento externo.
 
+## Atlas Company v1.0
+
+O painel `http://localhost:3000/company` avalia o ciclo completo da empresa e indica o primeiro gargalo real.
+
+- `POST /company/cycles/assess`: executa uma avaliação segura do negócio.
+- `GET /company/cycles`: lista o histórico de avaliações do usuário.
+
+O control plane nunca confunde simulação com operação real: sem métricas confirmadas, publicação e finanças continuam bloqueadas.
+
 ## Atlas v0.4
 
 O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.

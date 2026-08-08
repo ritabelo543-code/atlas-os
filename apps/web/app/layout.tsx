@@ -13,5 +13,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body>{children}<a className="content-shortcut" href="/content">Conteúdo</a><a className="distribution-shortcut" href="/distribution">Distribuição</a><a className="learning-shortcut" href="/learning">Aprendizado</a><a className="scale-shortcut" href="/scale">Escala · v0.9</a></body></html>;
+  return <html lang="pt-BR"><body>{children}<a className="content-shortcut" href="/content">Conteúdo</a><a className="distribution-shortcut" href="/distribution">Distribuição</a><a className="learning-shortcut" href="/learning">Aprendizado</a><a className="scale-shortcut" href="/scale">Escala</a><a className="company-shortcut" href="/company">Empresa · v1.0</a></body></html>;
 }
