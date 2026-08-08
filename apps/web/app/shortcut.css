@@ -1,1 +1,2 @@
 .content-shortcut{position:fixed;right:18px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:var(--green);color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #153b3233}
+.distribution-shortcut{position:fixed;right:125px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:var(--ink);color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #14151533}

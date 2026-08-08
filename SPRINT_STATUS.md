@@ -44,6 +44,24 @@ A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, p
 - Fluxo autenticado aprovado: oportunidade → plano → roteiro → revisão → aprovação.
 - Geração atual é determinística (`local-content-rules`), claramente identificada; não utiliza IA externa nem produz mídia final.
 
+## Sprint v0.7 — CONCLUÍDA EM MODO SEGURO
+
+- Social Distribution e Traffic Tracking Agents registrados no Agent Runtime.
+- Campanhas vinculadas obrigatoriamente a conteúdo aprovado e ao canal da peça.
+- Fluxo controlado: rascunho → aprovação → agendamento → execução.
+- Links rastreáveis com parâmetros UTM de origem, mídia, campanha e conteúdo.
+- Execução `dry_run` auditada, sem postagem externa ou alegação de entrega.
+- Modo `live` recusado enquanto não existir conector instalado e autorização explícita.
+- Persistência SQLite, Guardian e isolamento multiusuário aplicados às campanhas.
+- Distribution Center disponível em `/distribution`.
+
+### Validação v0.7
+
+- Core: 7 testes aprovados; API: 13 testes aprovados.
+- Build integral aprovado, incluindo `/distribution`.
+- Teste ponta a ponta aprovado: conteúdo não aprovado recusado; conteúdo aprovado convertido em campanha, aprovado, agendado e executado em simulação.
+- UTMs, estados operacionais e isolamento entre contas confirmados.
+
 ## Sprint v0.4 — CONCLUÍDA
 
 - Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
@@ -151,4 +169,4 @@ Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponí
 
 ## Próxima etapa
 
-v0.7 — Distribuição Automática, com publicação e agendamento multicanal protegidos por aprovação, permissões e rastreamento. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.
+v0.8 — Aprendizado Contínuo, usando dados confirmados de campanhas e resultados para comparar criativos e recomendar melhorias. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.
