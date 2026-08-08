@@ -4,6 +4,26 @@
 
 Atlas MVP finalizado ponta a ponta. API e Web iniciam localmente, o usuário cria uma missão na Mission Control, executa a análise, recebe uma decisão estruturada e consulta o histórico persistido. A API anterior de projetos e tarefas foi preservada.
 
+## Sprint v0.3 — CONCLUÍDA
+
+- Atlas Executive Agent executa o fluxo integral; a API apenas dispara a missão.
+- Agent Runtime registra estado, missão atual, timeout, cancelamento, duração, memória e provider.
+- Memory Manager v3 aplica decay temporal, prioridade, favoritos e referências cruzadas.
+- Knowledge Engine v3 suporta namespace, projeto, categorias, busca contextual e referências internas.
+- Decision Engine v3 registra alternativas comparáveis, riscos, impacto, custo, confiança ajustada e plano de execução.
+- Permission Manager protege ações críticas de agentes e plugins.
+- Plugin Runtime carrega, descarrega e controla versão/permissões; GitHub é o primeiro plugin real read-only.
+- Atlas Operation exibe agentes, plugins, memória, eventos e performance.
+
+### Validação v0.3
+
+- Core: 4 testes aprovados; API: 6 testes aprovados.
+- API, Web e monorepo compilados sem regressão.
+- Smoke real: duas missões executadas pelo Executive Agent; a segunda reutilizou 1 memória.
+- Decision v3 retornou 3 alternativas e plano com 3 etapas usando Mock automático.
+- Plugin GitHub consultou 4 repositórios públicos e registrou histórico sem exigir credencial.
+- Mission Control e Atlas Operation responderam HTTP 200.
+
 ## Sprint v0.2 — CONCLUÍDA
 
 - Atlas Operation em `/operation` e endpoints para operação, logs, conhecimento, decisões, agentes, plugins e configuração segura.

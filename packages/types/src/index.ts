@@ -32,6 +32,7 @@ export type KnowledgeItem = {
   createdAt: string; confidence: number; metadata: Record<string, string>;
   category?: string; tags?: string[]; relatedKnowledgeIds?: string[]; relevanceScore?: number;
   updatedAt?: string; updateHistory?: Array<{ timestamp: string; action: string }>;
+  namespace?: string; projectId?: string | null; internalReferences?: string[];
 };
 export type MissionStatus = "pending" | "running" | "completed" | "failed";
 export type Mission = {
@@ -45,6 +46,8 @@ export type Decision = {
   knowledgeIds: string[]; provider: string; model: string; createdAt: string;
   memoryIds?: string[];
   assumptions?: string[]; evidence?: Array<{ source: string; detail: string }>; risks?: string[]; alternatives?: string[];
+  alternativeAnalysis?: Array<{ option: string; impact: "low" | "medium" | "high"; cost: "low" | "medium" | "high"; risk: string; confidence: number }>;
+  executionPlan?: string[]; adjustedConfidence?: number;
 };
 export type AuditEntry = {
   id: string; timestamp: string; module: string; action: string;
@@ -54,8 +57,11 @@ export type MemoryScope = "temporary" | "persistent";
 export type MemoryItem = {
   id: string; scope: MemoryScope; missionId: string | null; source: string;
   content: string; summary: string; relevance: number; confidence: number;
-  tags: string[]; expiresAt: string | null; createdAt: string; updatedAt: string;
+  tags: string[]; priority?: number; favorite?: boolean; relatedMemoryIds?: string[];
+  expiresAt: string | null; createdAt: string; updatedAt: string;
 };
-export type AtlasAgent = { id: string; name: "CEO Agent" | "Architect Agent" | "Developer Agent" | "Knowledge Agent" | "QA Agent"; role: string; status: "registered" | "disabled" };
-export type PluginManifest = { id: string; name: string; version: string; enabled: boolean; capabilities: string[] };
+export type AgentState = "registered" | "idle" | "running" | "stopped" | "failed" | "cancelled";
+export type AtlasAgent = { id: string; name: string; role: string; status: AgentState; permissions?: string[]; currentMissionId?: string | null; provider?: string | null; memoryUsed?: number; startedAt?: string | null; elapsedMs?: number };
+export type PluginManifest = { id: string; name: string; version: string; enabled: boolean; capabilities: string[]; permissions?: string[]; status?: "loaded" | "unloaded" | "error" };
+export type AgentExecution = { id: string; agentId: string; missionId: string; state: AgentState; startedAt: string; finishedAt: string | null; elapsedMs: number; memoryUsed: number; provider: string | null; error: string | null };
 export type OperationLog = AuditEntry & { severity: "info" | "warning" | "error" };
