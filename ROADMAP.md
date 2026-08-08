@@ -29,12 +29,14 @@ O Atlas OS existe para pesquisar oportunidades, escolher ofertas, executar marke
 
 Entregue com geração textual determinística e rastreável, aprovação humana e briefings/roteiros para mídia. Geração de imagens e vídeos finais, IA externa e publicação permanecem fora desta versão.
 
-## v0.7 — Distribuição Automática
+## v0.7 — Distribuição Automática — CONCLUÍDA EM MODO SEGURO
 
 - Social e Traffic Agents.
 - Publicação e agendamento multicanal com aprovação e permissões.
 - Integrações prioritárias: Instagram, TikTok, YouTube, Pinterest, WordPress, Meta Ads e Google Ads.
 - Rastreamento de campanhas, custos, conversões e atribuição.
+
+O núcleo de campanha, aprovação, agendamento, UTMs e execução auditada foi entregue em `dry_run`. Conectores e publicação real permanecem bloqueados até configuração de credenciais, políticas de cada canal e autorização explícita.
 
 ## v0.8 — Aprendizado Contínuo
 

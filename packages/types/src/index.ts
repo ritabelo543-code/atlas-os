@@ -94,3 +94,8 @@ export type ContentVariant = { title: string; hook: string; cta: string };
 export type ContentAsset = { id: string; ownerId: string; planId: string; opportunityId: string; channel: ContentChannel; format: ContentFormat; title: string; body: string; cta: string; keywords: string[]; variants: ContentVariant[]; designBrief?: string; status: ContentStatus; generatedBy: string[]; generationMode: "deterministic" | "ai"; createdAt: string; updatedAt: string; reviewedAt?: string; reviewNotes?: string };
 export type CreateContentPlanInput = { opportunityId: string; objective: string; funnelStage: FunnelStage; channels: ContentChannel[]; keywords: string[]; tone: string };
 export type GenerateContentInput = { planId: string; channel: ContentChannel; format: ContentFormat; instructions?: string };
+
+export type DistributionMode = "dry_run" | "live";
+export type DistributionStatus = "draft" | "approved" | "scheduled" | "completed" | "failed" | "cancelled";
+export type DistributionCampaign = { id: string; ownerId: string; assetId: string; opportunityId: string; channel: ContentChannel; destination: string; scheduledAt: string; status: DistributionStatus; mode: DistributionMode; trackingUrl: string; utm: { source: string; medium: string; campaign: string; content: string }; approvedAt?: string; executedAt?: string; externalId?: string; result?: { delivered: boolean; detail: string }; createdAt: string; updatedAt: string };
+export type CreateDistributionInput = { assetId: string; channel: ContentChannel; destination: string; scheduledAt: string; targetUrl: string; campaignName: string; mode?: DistributionMode };

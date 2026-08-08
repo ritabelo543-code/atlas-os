@@ -46,6 +46,18 @@ O Content Studio em `http://localhost:3000/content` transforma uma oportunidade 
 
 As coleções `content_plans` e `content_assets` são persistidas no SQLite e auditadas pelo Guardian.
 
+## Distribuição automática v0.7
+
+O Distribution Center em `http://localhost:3000/distribution` prepara campanhas somente a partir de conteúdo aprovado. O fluxo inclui aprovação, agendamento, UTMs e execução simulada. Nenhuma postagem externa ocorre na configuração atual.
+
+- `POST/GET /distribution/campaigns`: cria e lista campanhas.
+- `GET /distribution/campaigns/:id`: consulta uma campanha isolada por proprietário.
+- `POST /distribution/campaigns/:id/approve`: registra aprovação humana.
+- `POST /distribution/campaigns/:id/schedule`: agenda uma campanha aprovada.
+- `POST /distribution/campaigns/:id/execute`: executa o `dry_run` auditado.
+
+O modo `live` é recusado até existir um conector real do canal e autorização explícita.
+
 ## Atlas v0.4
 
 O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.
