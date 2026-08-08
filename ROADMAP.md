@@ -18,7 +18,14 @@
 
 ## v0.4 — Colaboração
 
-- Autenticação e autorização.
-- Integrações de plugins reais.
-- Operação multiusuário e observabilidade.
-- Persistência transacional e busca semântica com embeddings.
+- Autenticação local e isolamento multiusuário.
+- Persistência transacional SQLite com migração dos JSON.
+- Busca semântica local por vetores de termos/bigramas.
+- Operação autenticada e sessões de usuário.
+
+## v0.5 — Produção
+
+- Autenticação federada, recuperação de conta e rotação de sessões.
+- PostgreSQL para implantação distribuída.
+- Embeddings e avaliação de busca semântica.
+- Observabilidade, quotas e administração de organizações.

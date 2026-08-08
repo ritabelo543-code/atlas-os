@@ -4,6 +4,24 @@
 
 Atlas MVP finalizado ponta a ponta. API e Web iniciam localmente, o usuário cria uma missão na Mission Control, executa a análise, recebe uma decisão estruturada e consulta o histórico persistido. A API anterior de projetos e tarefas foi preservada.
 
+## Sprint v0.4 — CONCLUÍDA
+
+- Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
+- Isolamento de missões, decisões, memória e conhecimento por usuário.
+- SQLite nativo com WAL, transações e migração automática dos JSON legados.
+- Busca semântica local com vetores de termos/bigramas e similaridade de cosseno.
+- Mission Control autenticada e Atlas Operation por sessão.
+
+### Validação v0.4
+
+- Core: 5 testes aprovados; API: 8 testes aprovados.
+- Testes específicos de autenticação, isolamento multiusuário, busca semântica e transações SQLite aprovados.
+- Builds da API, Web e monorepo aprovados.
+- Smoke real: duas contas isoladas; 2 missões para a primeira e 0 para a segunda.
+- Reinício real: login, 2 missões e 2 memórias recuperados do SQLite.
+- Segunda missão relacionada reutilizou 1 memória usando Mock automático.
+- Web autenticada respondeu HTTP 200 com cadastro/login.
+
 ## Sprint v0.3 — CONCLUÍDA
 
 - Atlas Executive Agent executa o fluxo integral; a API apenas dispara a missão.

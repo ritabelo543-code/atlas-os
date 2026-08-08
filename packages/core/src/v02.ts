@@ -11,11 +11,11 @@ export class MemoryManager {
     if (duplicate) return duplicate;
     items.unshift(item); await this.store.save(items.slice(0, this.maxItems)); return item;
   }
-  async context(query: string, excludeMissionId?: string, limit = 5): Promise<MemoryItem[]> {
+  async context(query: string, excludeMissionId?: string, limit = 5, ownerId?: string): Promise<MemoryItem[]> {
     const now = new Date().toISOString();
     const terms = new Set(query.toLowerCase().split(/\W+/).filter((term) => term.length > 2));
     return (await this.store.load())
-      .filter((item) => (!item.expiresAt || item.expiresAt > now) && item.missionId !== excludeMissionId)
+      .filter((item) => (!item.expiresAt || item.expiresAt > now) && item.missionId !== excludeMissionId && (!ownerId || item.ownerId === ownerId))
       .map((item) => { const ageDays = Math.max(0, (Date.now() - Date.parse(item.updatedAt)) / 86400000); const decay = Math.exp(-ageDays / this.retentionDays); const lexical = [...terms].reduce((score, term) => score + (`${item.summary} ${item.content} ${item.tags.join(" ")}`.toLowerCase().includes(term) ? 1 : 0), 0); return { item, score: lexical + item.relevance * decay + item.confidence / 10 + (item.priority ?? .5) + (item.favorite ? 1 : 0) }; })
       .filter(({ score }) => score > 1).sort((a, b) => b.score - a.score).slice(0, limit).map(({ item }) => item);
   }

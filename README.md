@@ -17,7 +17,7 @@ Sem configuração adicional, o Atlas usa o provider Mock determinístico. Para 
 
 Para apontar a Web para outra API, copie `apps/web/.env.example` para `apps/web/.env.local` e altere `NEXT_PUBLIC_API_URL`.
 
-## Atlas v0.3
+## Atlas v0.4
 
 O painel interno fica em `http://localhost:3000/operation`. Ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins.
 
@@ -34,6 +34,18 @@ Cada missão concluída gera uma memória persistente em JSON com origem, missã
 
 O plugin GitHub opera em leitura para dados públicos sem credencial. Defina `GITHUB_TOKEN` apenas para repositórios privados ou maior limite de API; sua ausência não bloqueia o Atlas.
 
+### Autenticação e multiusuário
+
+A primeira conta criada recebe papel `admin`; as seguintes recebem `member`. Senhas são derivadas com `scrypt`, nunca armazenadas em texto, e as sessões usam tokens HMAC com validade de 24 horas. Defina `AUTH_SECRET` em ambientes compartilhados. Missões, decisões, memórias e conhecimento são filtrados pelo proprietário autenticado.
+
+### Persistência transacional
+
+O armazenamento padrão é SQLite nativo em `apps/api/data/atlas.db`, com WAL e transações `BEGIN IMMEDIATE/COMMIT/ROLLBACK`. Na primeira inicialização, os JSON legados são importados automaticamente quando o banco ainda não existe; os arquivos originais permanecem intactos.
+
+### Busca semântica local
+
+O Knowledge Engine cria vetores locais de termos e bigramas normalizados e ordena resultados por similaridade de cosseno e confiança. Não requer embeddings externos, credenciais ou banco vetorial.
+
 ## Validar
 
 ```sh
@@ -44,4 +56,4 @@ pnpm --filter @atlas/web build
 pnpm turbo run build
 ```
 
-Os dados locais ficam em `apps/api/data`. Cada sobrescrita válida mantém uma cópia anterior com extensão `.bak`. `ATLAS_DATA_DIR` permite usar outro diretório, inclusive para testes isolados.
+Os dados locais ficam em `apps/api/data/atlas.db`. `ATLAS_DATA_DIR` ou `ATLAS_DATABASE_PATH` permitem usar outro destino, inclusive para testes isolados.

@@ -20,10 +20,10 @@ export class AgentRuntime {
   listAgents(): AtlasAgent[] { return [...this.agents.values()].map((agent) => ({ ...agent })); }
   listExecutions(): AgentExecution[] { return this.executions.map((execution) => ({ ...execution })); }
 
-  async run<T>(agentId: string, missionId: string, task: (signal: AbortSignal) => Promise<{ result: T; memoryUsed: number; provider: string }>, timeoutMs = 30_000): Promise<T> {
+  async run<T>(agentId: string, missionId: string, task: (signal: AbortSignal) => Promise<{ result: T; memoryUsed: number; provider: string }>, timeoutMs = 30_000, ownerId?: string): Promise<T> {
     const agent = this.mustAgent(agentId); if (agent.status === "stopped") throw new Error("Agent is stopped");
     const controller = new AbortController(); const id = crypto.randomUUID(); const started = Date.now();
-    const execution: AgentExecution = { id, agentId, missionId, state: "running", startedAt: new Date(started).toISOString(), finishedAt: null, elapsedMs: 0, memoryUsed: 0, provider: null, error: null };
+    const execution: AgentExecution = { id, agentId, missionId, ownerId, state: "running", startedAt: new Date(started).toISOString(), finishedAt: null, elapsedMs: 0, memoryUsed: 0, provider: null, error: null };
     this.executions.unshift(execution); this.controllers.set(id, controller); Object.assign(agent, { status: "running", currentMissionId: missionId, startedAt: execution.startedAt });
     const timer = setTimeout(() => controller.abort(new Error("Agent execution timed out")), timeoutMs);
     try {
