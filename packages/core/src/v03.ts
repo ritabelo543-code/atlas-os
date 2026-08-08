@@ -20,10 +20,10 @@ export class AgentRuntime {
   listAgents(): AtlasAgent[] { return [...this.agents.values()].map((agent) => ({ ...agent })); }
   listExecutions(): AgentExecution[] { return this.executions.map((execution) => ({ ...execution })); }
 
-  async run<T>(agentId: string, missionId: string, task: (signal: AbortSignal) => Promise<{ result: T; memoryUsed: number; provider: string }>, timeoutMs = 30_000): Promise<T> {
+  async run<T>(agentId: string, missionId: string, task: (signal: AbortSignal) => Promise<{ result: T; memoryUsed: number; provider: string }>, timeoutMs = 30_000, ownerId?: string): Promise<T> {
     const agent = this.mustAgent(agentId); if (agent.status === "stopped") throw new Error("Agent is stopped");
     const controller = new AbortController(); const id = crypto.randomUUID(); const started = Date.now();
-    const execution: AgentExecution = { id, agentId, missionId, state: "running", startedAt: new Date(started).toISOString(), finishedAt: null, elapsedMs: 0, memoryUsed: 0, provider: null, error: null };
+    const execution: AgentExecution = { id, agentId, missionId, ownerId, state: "running", startedAt: new Date(started).toISOString(), finishedAt: null, elapsedMs: 0, memoryUsed: 0, provider: null, error: null };
     this.executions.unshift(execution); this.controllers.set(id, controller); Object.assign(agent, { status: "running", currentMissionId: missionId, startedAt: execution.startedAt });
     const timer = setTimeout(() => controller.abort(new Error("Agent execution timed out")), timeoutMs);
     try {
@@ -51,21 +51,21 @@ export class PluginRuntime {
   private mustPlugin(id: string): AtlasPlugin { const plugin = this.plugins.get(id); if (!plugin) throw new Error(`Plugin not registered: ${id}`); return plugin; }
 }
 
-export type GitHubHistoryEntry = { timestamp: string; action: string; repository: string };
+export type GitHubHistoryEntry = { timestamp: string; action: string; repository: string; ownerId?: string };
 export class GitHubPlugin implements AtlasPlugin {
   manifest: PluginManifest = { id: "github", name: "GitHub", version: "1.0.0", enabled: false, status: "unloaded", capabilities: ["repositories.read", "pull_requests.read", "issues.read"], permissions: ["network.github.read"] };
   private readonly history: GitHubHistoryEntry[] = [];
   constructor(private readonly token?: string, private readonly apiUrl = "https://api.github.com") {}
   async load(): Promise<void> {}
   async unload(): Promise<void> {}
-  listHistory(): GitHubHistoryEntry[] { return this.history.map((item) => ({ ...item })); }
-  repositories(owner: string): Promise<unknown> { return this.request(`/users/${encodeURIComponent(owner)}/repos`, "repositories", owner); }
-  pullRequests(owner: string, repo: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`, "pull_requests", `${owner}/${repo}`); }
-  issues(owner: string, repo: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, "issues", `${owner}/${repo}`); }
-  private async request(path: string, action: string, repository: string): Promise<unknown> {
+  listHistory(ownerId?: string): GitHubHistoryEntry[] { return this.history.filter((item) => !ownerId || item.ownerId === ownerId).map((item) => ({ ...item })); }
+  repositories(owner: string, ownerId?: string): Promise<unknown> { return this.request(`/users/${encodeURIComponent(owner)}/repos`, "repositories", owner, ownerId); }
+  pullRequests(owner: string, repo: string, ownerId?: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`, "pull_requests", `${owner}/${repo}`, ownerId); }
+  issues(owner: string, repo: string, ownerId?: string): Promise<unknown> { return this.request(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues`, "issues", `${owner}/${repo}`, ownerId); }
+  private async request(path: string, action: string, repository: string, ownerId?: string): Promise<unknown> {
     if (!this.manifest.enabled) throw new Error("GitHub plugin is not loaded");
     const response = await fetch(`${this.apiUrl}${path}`, { headers: { accept: "application/vnd.github+json", "user-agent": "atlas-os", ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) } });
     if (!response.ok) throw new Error(`GitHub request failed (${response.status})`);
-    this.history.unshift({ timestamp: new Date().toISOString(), action, repository }); return response.json();
+    this.history.unshift({ timestamp: new Date().toISOString(), action, repository, ownerId }); return response.json();
   }
 }

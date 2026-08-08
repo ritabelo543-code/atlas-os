@@ -6,10 +6,12 @@ export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 export type Project = {
   id: string; name: string; description: string; status: ProjectStatus;
   createdAt: string; updatedAt: string;
+  ownerId?: string;
 };
 export type Task = {
   id: string; projectId: string; title: string; completed: boolean;
   priority: TaskPriority; dueDate: string | null; createdAt: string; updatedAt: string;
+  ownerId?: string;
 };
 export type CreateProjectInput = Pick<Project, "name" | "description">;
 export type UpdateProjectInput = Partial<Pick<Project, "name" | "description" | "status">>;
@@ -33,11 +35,13 @@ export type KnowledgeItem = {
   category?: string; tags?: string[]; relatedKnowledgeIds?: string[]; relevanceScore?: number;
   updatedAt?: string; updateHistory?: Array<{ timestamp: string; action: string }>;
   namespace?: string; projectId?: string | null; internalReferences?: string[];
+  ownerId?: string;
 };
 export type MissionStatus = "pending" | "running" | "completed" | "failed";
 export type Mission = {
   id: string; title: string; objective: string; context: string; status: MissionStatus;
   createdAt: string; updatedAt: string; decisionId: string | null;
+  ownerId?: string;
 };
 export type CreateMissionInput = Pick<Mission, "title" | "objective" | "context">;
 export type Decision = {
@@ -48,10 +52,12 @@ export type Decision = {
   assumptions?: string[]; evidence?: Array<{ source: string; detail: string }>; risks?: string[]; alternatives?: string[];
   alternativeAnalysis?: Array<{ option: string; impact: "low" | "medium" | "high"; cost: "low" | "medium" | "high"; risk: string; confidence: number }>;
   executionPlan?: string[]; adjustedConfidence?: number;
+  ownerId?: string;
 };
 export type AuditEntry = {
   id: string; timestamp: string; module: string; action: string;
   context: Record<string, string | number | boolean | null>; result: "allowed" | "denied" | "success" | "failure";
+  ownerId?: string;
 };
 export type MemoryScope = "temporary" | "persistent";
 export type MemoryItem = {
@@ -59,9 +65,12 @@ export type MemoryItem = {
   content: string; summary: string; relevance: number; confidence: number;
   tags: string[]; priority?: number; favorite?: boolean; relatedMemoryIds?: string[];
   expiresAt: string | null; createdAt: string; updatedAt: string;
+  ownerId?: string;
 };
+export type AtlasUser = { id: string; email: string; name: string; role: "admin" | "member"; createdAt: string };
+export type AuthSession = { token: string; user: AtlasUser; expiresAt: string };
 export type AgentState = "registered" | "idle" | "running" | "stopped" | "failed" | "cancelled";
 export type AtlasAgent = { id: string; name: string; role: string; status: AgentState; permissions?: string[]; currentMissionId?: string | null; provider?: string | null; memoryUsed?: number; startedAt?: string | null; elapsedMs?: number };
 export type PluginManifest = { id: string; name: string; version: string; enabled: boolean; capabilities: string[]; permissions?: string[]; status?: "loaded" | "unloaded" | "error" };
-export type AgentExecution = { id: string; agentId: string; missionId: string; state: AgentState; startedAt: string; finishedAt: string | null; elapsedMs: number; memoryUsed: number; provider: string | null; error: string | null };
+export type AgentExecution = { id: string; agentId: string; missionId: string; ownerId?: string; state: AgentState; startedAt: string; finishedAt: string | null; elapsedMs: number; memoryUsed: number; provider: string | null; error: string | null };
 export type OperationLog = AuditEntry & { severity: "info" | "warning" | "error" };

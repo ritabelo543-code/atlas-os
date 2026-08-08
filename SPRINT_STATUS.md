@@ -4,6 +4,33 @@
 
 Atlas MVP finalizado ponta a ponta. API e Web iniciam localmente, o usuário cria uma missão na Mission Control, executa a análise, recebe uma decisão estruturada e consulta o histórico persistido. A API anterior de projetos e tarefas foi preservada.
 
+## Direção oficial do produto
+
+O Atlas OS deve operar uma empresa digital autônoma: pesquisar mercados e nichos, selecionar oportunidades e produtos, planejar e executar campanhas, produzir e distribuir conteúdo, medir conversões/ROI/lucro, aprender e escalar resultados vencedores.
+
+A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, persistência, autenticação e runtimes são fundações válidas. Mission Control, Atlas Operation, Knowledge, Memory, Decision Engine, agentes, plugins, prompts e contratos de missão ainda precisam ser orientados a resultados comerciais. GitHub e agentes de TI permanecem apenas como legado auxiliar, sem prioridade no roadmap do produto.
+
+## Sprint v0.4 — CONCLUÍDA
+
+- Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
+- Isolamento de missões, decisões, memória e conhecimento por usuário.
+- SQLite nativo com WAL, transações e migração automática dos JSON legados.
+- Busca semântica local com vetores de termos/bigramas e similaridade de cosseno.
+- Mission Control autenticada e Atlas Operation por sessão.
+- Projects e Tasks protegidos integralmente por autenticação e `ownerId`, incluindo listagem, consulta, criação, edição e exclusão.
+- Dados legados de Projects/Tasks sem autoria são preservados e atribuídos ao primeiro administrador.
+
+### Validação v0.4
+
+- Core: 5 testes aprovados; API: 10 testes aprovados.
+- Testes específicos de autenticação, isolamento multiusuário, busca semântica e transações SQLite aprovados.
+- Builds da API, Web e monorepo aprovados.
+- Smoke real: duas contas isoladas; 2 missões para a primeira e 0 para a segunda.
+- Reinício real: login, 2 missões e 2 memórias recuperados do SQLite.
+- Segunda missão relacionada reutilizou 1 memória usando Mock automático.
+- Web autenticada respondeu HTTP 200 com cadastro/login.
+- Smoke final: proprietário recuperou Project/Task após reinício; outro usuário recebeu listas vazias e 404 em consulta, edição e exclusão.
+
 ## Sprint v0.3 — CONCLUÍDA
 
 - Atlas Executive Agent executa o fluxo integral; a API apenas dispara a missão.
@@ -66,7 +93,7 @@ O Core não depende do framework HTTP, da interface ou do armazenamento em arqui
 | POST | `/missions/:id/execute` | Executar recuperação, análise e decisão |
 | GET | `/decisions/:id` | Consultar decisão estruturada |
 
-Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponíveis.
+Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponíveis; Projects e Tasks exigem autenticação e aplicam isolamento por proprietário.
 
 ## Validação executada
 
@@ -82,12 +109,12 @@ Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponí
 
 ## Limitações atuais
 
-- A busca de conhecimento é lexical; embeddings, banco vetorial e RAG avançado ficam fora do MVP.
+- A busca semântica é local por termos/bigramas; embeddings, banco vetorial e RAG avançado ficam fora da v0.4.
 - O provider externo espera API compatível com `/chat/completions` e resposta JSON; sem chave, o modo local mantém todo o fluxo funcional.
-- JSON local é adequado para uso individual e baixo volume, não para múltiplas instâncias concorrentes.
-- Não há autenticação/autorização; a implantação pública exige essa camada antes de exposição.
+- SQLite é adequado para instância única; operação distribuída exigirá banco servidor, como PostgreSQL.
+- Não há recuperação de senha, MFA ou autenticação federada; exposição pública exige essas camadas adicionais.
 - A UI prioriza o fluxo de missão; projetos e tarefas continuam disponíveis na API, mas não são o foco da tela atual.
 
 ## Próxima etapa pós-MVP
 
-Adicionar autenticação, migrar persistência crítica para banco transacional, disponibilizar cadastro de conhecimento na UI, evoluir busca semântica e adicionar observabilidade/avaliações dos providers antes de produção multiusuário.
+Adicionar recuperação de conta, MFA, autenticação federada, PostgreSQL distribuído e observabilidade antes de produção pública.

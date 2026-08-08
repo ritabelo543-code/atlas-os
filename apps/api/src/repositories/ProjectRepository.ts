@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import type { Project } from "@atlas/types";
-import { createJsonStore, type JsonStore } from "../lib/storage.js";
+import type { CollectionStore } from "@atlas/core";
+import { createJsonStore } from "../lib/storage.js";
 export type { Project } from "@atlas/types";
 
 const projectsFile = fileURLToPath(
@@ -19,7 +20,7 @@ const initialProjects: Project[] = [
 ];
 
 export class ProjectRepository {
-  constructor(private readonly store: JsonStore<Project> = createJsonStore(projectsFile, initialProjects)) {}
+  constructor(private readonly store: CollectionStore<Project> = createJsonStore(projectsFile, initialProjects)) {}
 
   async findAll(): Promise<Project[]> {
     return (await this.store.load()).map((project) => ({
@@ -32,4 +33,5 @@ export class ProjectRepository {
   async saveAll(projects: Project[]): Promise<void> {
     await this.store.save(projects);
   }
+  close(): void { this.store.close?.(); }
 }
