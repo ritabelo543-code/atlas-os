@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import type { Project, Task } from "@atlas/types";
+import type { ContentAsset, ContentPlan, MarketOpportunity, Project, Task } from "@atlas/types";
 import type { AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
-import { AgentRuntime, AtlasCore, Guardian, MarketIntelligence, MockAiProvider, PermissionManager } from "@atlas/core";
+import { AgentRuntime, AtlasCore, ContentStudio, Guardian, MarketIntelligence, MockAiProvider, PermissionManager } from "@atlas/core";
 import { buildApp } from "../src/app.js";
 import type { JsonStore } from "../src/lib/storage.js";
 import { ProjectRepository } from "../src/repositories/ProjectRepository.js";
@@ -21,8 +21,10 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const tasks = new TaskService(new TaskRepository(memoryStore<Task>(initialTasks)));
   const atlas = new AtlasCore(new MockAiProvider(), { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
   const auth = new AuthService(memoryStore<StoredUser>(), "test-secret");
-  const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: memoryStore() }, new Guardian(memoryStore<AuditEntry>()), new AgentRuntime(), new PermissionManager());
-  const app = await buildApp({ projects, tasks, atlas, auth, market, logger: false });
+  const opportunityStore = memoryStore<MarketOpportunity>(); const runtime = new AgentRuntime(); const permissions = new PermissionManager(); const guardian = new Guardian(memoryStore<AuditEntry>());
+  const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions);
+  const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: memoryStore<ContentAsset>() }, opportunityStore, guardian, runtime, permissions);
+  const app = await buildApp({ projects, tasks, atlas, auth, market, content, logger: false });
   apps.push(app);
   return app;
 }
@@ -76,13 +78,25 @@ test("agent, plugin and performance operation endpoints expose v0.3 runtime", as
   assert.equal((await app.inject({ method: "GET", url: "/atlas/agents" })).json()[0].name, "Atlas Executive Agent");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/plugins" })).json()[0].status, "loaded");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/performance", headers })).json().executions, 0);
-  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "0.5.0");
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "0.6.0");
 });
 
 test("market research ranks traceable simulated opportunities and isolates users", async () => {
   const app = await testApp(); const owner = await authHeaders(app, "market-owner@example.com"); const outsider = await authHeaders(app, "market-outsider@example.com");
   const payload = { query: "automação para pequenas empresas", market: "Software", niche: "automação", audience: "pequenas empresas", painOrDesire: "economizar tempo", channels: ["SEO", "YouTube"], evidence: [{ source: "fixture:v0.5", observedAt: "2026-08-08T00:00:00.000Z", excerpt: "Sinal simulado de demanda crescente", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta Demo", provider: "fixture", commission: 30, commissionKind: "simulated", notes: "Somente demonstração" }], metrics: { demand: 85, commercialIntent: 75, competition: 45, monetization: 80, margin: 70, effort: 30, risk: 25, evidenceQuality: 80, confidence: 75, scalability: 85 }, dataKind: "simulated" };
   const response = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload }); assert.equal(response.statusCode, 201); const opportunity = response.json().opportunities[0]; assert.equal(opportunity.dataKind, "simulated"); assert.ok(opportunity.score > 0); assert.match(opportunity.rankingRationale, /Demanda/); assert.equal((await app.inject({ method: "GET", url: "/market/opportunities", headers: owner })).json().length, 1); assert.equal((await app.inject({ method: "GET", url: "/market/opportunities", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: `/market/opportunities/${opportunity.id}`, headers: outsider })).statusCode, 404);
+});
+
+test("content studio creates, generates, reviews and isolates commercial assets", async () => {
+  const app = await testApp(); const owner = await authHeaders(app, "content-owner@example.com"); const outsider = await authHeaders(app, "content-outsider@example.com");
+  const research = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload: { query: "produtividade", market: "Software", niche: "produtividade", audience: "profissionais autônomos", painOrDesire: "economizar tempo", channels: ["blog", "youtube"], evidence: [{ source: "fixture:v0.6", observedAt: "2026-08-08T00:00:00.000Z", excerpt: "Demanda simulada crescente", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta Demo", provider: "fixture", notes: "Demonstração" }], metrics: { demand: 80, commercialIntent: 70, competition: 40, monetization: 75, margin: 70, effort: 35, risk: 25, evidenceQuality: 80, confidence: 75, scalability: 80 }, dataKind: "simulated" } });
+  const opportunityId = research.json().opportunities[0].id;
+  const planResponse = await app.inject({ method: "POST", url: "/content/plans", headers: owner, payload: { opportunityId, objective: "Apresentar a oferta com transparência", funnelStage: "conversion", channels: ["blog", "youtube"], keywords: ["produtividade", "economizar tempo"], tone: "claro e confiável" } });
+  assert.equal(planResponse.statusCode, 201); const plan = planResponse.json<ContentPlan>(); assert.equal(plan.opportunityId, opportunityId);
+  const assetResponse = await app.inject({ method: "POST", url: "/content/assets", headers: owner, payload: { planId: plan.id, channel: "youtube", format: "video-script" } });
+  assert.equal(assetResponse.statusCode, 201); const asset = assetResponse.json<ContentAsset>(); assert.equal(asset.status, "in_review"); assert.equal(asset.variants.length, 3); assert.match(asset.body, /Transparência/); assert.equal(asset.generationMode, "deterministic");
+  const reviewed = await app.inject({ method: "PATCH", url: `/content/assets/${asset.id}/review`, headers: owner, payload: { status: "approved", notes: "Revisado" } }); assert.equal(reviewed.json().status, "approved");
+  assert.equal((await app.inject({ method: "GET", url: "/content/assets", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: `/content/assets/${asset.id}`, headers: outsider })).statusCode, 404);
 });
 
 test("authentication isolates missions between users", async () => {

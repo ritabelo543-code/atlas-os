@@ -20,12 +20,14 @@ O Atlas OS existe para pesquisar oportunidades, escolher ofertas, executar marke
 - Catálogo de produtos e ofertas de afiliados.
 - Mission Control orientado a oportunidades, produtos e hipóteses comerciais.
 
-## v0.6 — Conteúdo Automatizado
+## v0.6 — Conteúdo Automatizado — CONCLUÍDA
 
 - Content, SEO, Copywriting, Design e Video Agents.
 - Planejamento editorial ligado a produto, público, canal e etapa do funil.
 - Produção e revisão de textos, criativos, roteiros e páginas.
 - Experimentos com títulos, ofertas, CTAs e formatos.
+
+Entregue com geração textual determinística e rastreável, aprovação humana e briefings/roteiros para mídia. Geração de imagens e vídeos finais, IA externa e publicação permanecem fora desta versão.
 
 ## v0.7 — Distribuição Automática
 
