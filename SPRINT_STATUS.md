@@ -81,6 +81,24 @@ A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, p
 - Métricas simuladas calcularam CTR 10%, conversão 10%, ROI 200% e lucro 100 no cenário de teste.
 - Insight resultante permaneceu identificado como `simulated` e isolado da segunda conta.
 
+## Sprint v0.9 — CONCLUÍDA EM MODO SEGURO
+
+- Finance e Scale Agents adicionados ao Agent Runtime.
+- Políticas com orçamento total/diário, aumento máximo, ROI mínimo, conversões mínimas e CAC máximo.
+- Propostas de escala com ações `scale`, `hold` ou `stop`, justificativa e riscos.
+- Aprovação humana obrigatória antes da simulação.
+- Execução financeira real permanentemente desativada nesta versão.
+- Dados simulados, conversões insuficientes, ROI/CAC inadequados ou orçamento zero bloqueiam escala.
+- Persistência SQLite, Guardian e isolamento multiusuário.
+- Scale Engine disponível em `/scale`.
+
+### Validação v0.9
+
+- Core: 7 testes aprovados; API: 13 testes aprovados.
+- Build integral aprovado, incluindo `/scale`.
+- Política segura de orçamento zero produziu `hold`, orçamento proposto zero e riscos `unconfirmed-data`/`zero-budget-policy`.
+- Aprovação e execução simulada não realizaram transação financeira.
+
 ## Sprint v0.4 — CONCLUÍDA
 
 - Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
@@ -188,4 +206,4 @@ Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponí
 
 ## Próxima etapa
 
-v0.9 — Escala Inteligente, com regras de orçamento, margem e risco que somente poderão operar sobre dados confirmados. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.
+v1.0 — Empresa Autônoma, integrando o ciclo inteiro sob operação humana por exceção. Publicação, credenciais, orçamento real, recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública.

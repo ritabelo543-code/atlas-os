@@ -68,6 +68,17 @@ O Learning Engine em `http://localhost:3000/learning` registra métricas, calcul
 
 Campanhas em `dry_run` não podem produzir métricas confirmadas.
 
+## Escala inteligente v0.9
+
+O Scale Engine em `http://localhost:3000/scale` cria políticas financeiras, avalia insights e produz propostas rastreáveis. A configuração inicial usa orçamento zero e execução real desativada.
+
+- `POST/GET /scale/policies`: cria e lista políticas.
+- `POST/GET /scale/proposals`: cria e lista propostas.
+- `POST /scale/proposals/:id/review`: aprova ou rejeita uma proposta.
+- `POST /scale/proposals/:id/simulate`: executa somente a simulação auditada.
+
+Nenhum endpoint executa pagamento, compra de mídia ou alteração de orçamento externo.
+
 ## Atlas v0.4
 
 O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.
