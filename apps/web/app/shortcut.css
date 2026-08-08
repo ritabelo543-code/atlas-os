@@ -2,3 +2,4 @@
 .distribution-shortcut{position:fixed;right:125px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:var(--ink);color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #14151533}
 .learning-shortcut{position:fixed;right:238px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:#427368;color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #42736833}
 .scale-shortcut{position:fixed;right:355px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:#7a5a22;color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #7a5a2233}
+.company-shortcut{position:fixed;right:455px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:#742f3e;color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #742f3e33}

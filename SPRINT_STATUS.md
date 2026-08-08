@@ -99,6 +99,23 @@ A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, p
 - Política segura de orçamento zero produziu `hold`, orçamento proposto zero e riscos `unconfirmed-data`/`zero-budget-policy`.
 - Aprovação e execução simulada não realizaram transação financeira.
 
+## Sprint v1.0 — CONTROL PLANE CONCLUÍDO
+
+- Atlas COO Agent adicionado para avaliar o ciclo empresarial completo.
+- Estágios coordenados: pesquisa, conteúdo, distribuição, medição, aprendizado e escala.
+- Cada avaliação identifica contagens, bloqueios e a próxima ação operacional.
+- Operação humana por exceção com publicação externa e execução financeira desativadas.
+- Ciclos persistidos, auditados e isolados por usuário.
+- Painel empresarial disponível em `/company`.
+
+### Validação v1.0
+
+- Core: 7 testes aprovados; API: 13 testes aprovados.
+- Build integral aprovado, incluindo `/company`.
+- Avaliação reconheceu o ciclo simulado e bloqueou a etapa de medição por ausência de fonte real.
+- Próxima ação recomendada: conectar fonte real e registrar métricas confirmadas.
+- Flags de publicação externa e execução financeira permaneceram `false`.
+
 ## Sprint v0.4 — CONCLUÍDA
 
 - Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
@@ -206,4 +223,4 @@ Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponí
 
 ## Próxima etapa
 
-v1.0 — Empresa Autônoma, integrando o ciclo inteiro sob operação humana por exceção. Publicação, credenciais, orçamento real, recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública.
+Próxima etapa operacional: conectar fontes reais de mercado, programas de afiliados, publicação e analytics; somente então habilitar vendas reais sob políticas aprovadas. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública.
