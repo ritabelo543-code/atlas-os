@@ -43,6 +43,8 @@ test("mission flow returns a structured decision and history", async () => {
   assert.ok(decision.recommendation);
   assert.ok(decision.rationale);
   assert.ok(decision.nextSteps.length);
+  assert.equal(decision.alternatives?.length, 3);
+  assert.equal(decision.executionPlan?.length, 3);
   assert.equal((await app.inject({ method: "GET", url: "/missions" })).json<Mission[]>()[0]?.status, "completed");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().ai.mode, "mock");
 });
@@ -58,6 +60,16 @@ test("a related mission reuses persistent memory from the previous mission", asy
   assert.match(secondDecision.rationale, /1 memória/);
   const operation = (await app.inject({ method: "GET", url: "/atlas/operation" })).json();
   assert.equal(operation.counts.memory, 2);
+  assert.equal(operation.counts.agents, 1);
+  assert.equal(operation.counts.executions, 2);
+});
+
+test("agent, plugin and performance operation endpoints expose v0.3 runtime", async () => {
+  const app = await testApp();
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/agents" })).json()[0].name, "Atlas Executive Agent");
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/plugins" })).json()[0].status, "loaded");
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/performance" })).json().executions, 0);
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "0.3.0");
 });
 
 test("project and task lifecycle works end to end", async () => {
