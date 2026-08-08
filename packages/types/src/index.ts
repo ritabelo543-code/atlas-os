@@ -104,3 +104,9 @@ export type CampaignMetrics = { impressions: number; clicks: number; conversions
 export type PerformanceRecord = { id: string; ownerId: string; campaignId: string; assetId: string; opportunityId: string; metrics: CampaignMetrics; ctr: number; conversionRate: number; cac: number | null; roi: number | null; profit: number; dataKind: EvidenceValueKind; source: string; observedAt: string; createdAt: string };
 export type LearningInsight = { id: string; ownerId: string; opportunityId: string; recordIds: string[]; winnerRecordId?: string; summary: string; recommendation: string; confidence: number; dataKind: EvidenceValueKind; createdAt: string };
 export type CreatePerformanceInput = { campaignId: string; metrics: CampaignMetrics; dataKind: EvidenceValueKind; source: string; observedAt: string };
+
+export type ScalePolicy = { id: string; ownerId: string; name: string; maxTotalBudget: number; maxDailyBudget: number; maxIncreasePercent: number; minRoiPercent: number; minConversions: number; maxCac: number; requireConfirmedData: boolean; requireHumanApproval: true; liveExecutionEnabled: false; createdAt: string; updatedAt: string };
+export type ScaleAction = "scale" | "hold" | "stop";
+export type ScaleProposal = { id: string; ownerId: string; policyId: string; insightId: string; opportunityId: string; action: ScaleAction; rationale: string; currentBudget: number; proposedBudget: number; riskFlags: string[]; dataKind: EvidenceValueKind; status: "draft" | "approved" | "rejected" | "simulated"; createdAt: string; updatedAt: string; approvedAt?: string; simulatedAt?: string };
+export type CreateScalePolicyInput = Pick<ScalePolicy, "name" | "maxTotalBudget" | "maxDailyBudget" | "maxIncreasePercent" | "minRoiPercent" | "minConversions" | "maxCac"> & { requireConfirmedData?: boolean };
+export type CreateScaleProposalInput = { policyId: string; insightId: string; currentBudget: number };

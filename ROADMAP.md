@@ -47,12 +47,14 @@ O núcleo de campanha, aprovação, agendamento, UTMs e execução auditada foi 
 
 O motor diferencia dados confirmados, calculados e simulados. Campanhas `dry_run` não podem registrar desempenho confirmado nem gerar falsa evidência de vendas.
 
-## v0.9 — Escala Inteligente
+## v0.9 — Escala Inteligente — CONCLUÍDA EM MODO SEGURO
 
 - Finance e Scale Agents.
 - Regras de orçamento, margem, risco e interrupção automática.
 - Escala de campanhas vencedoras e descarte de iniciativas improdutivas.
 - Portfólio de ativos digitais, produtos, canais e fontes de receita.
+
+Políticas, propostas, aprovação e simulação foram entregues. Execução financeira real permanece desativada; dados não confirmados e orçamento zero bloqueiam escala.
 
 ## v1.0 — Empresa Autônoma
 

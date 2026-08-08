@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
-import { ContentStudio, DistributionCenter, GitHubPlugin, LearningEngine, MarketIntelligence, PluginRuntime, type AtlasCore } from "@atlas/core";
-import type { AffiliateOffer, ContentAsset, ContentPlan, CreateContentPlanInput, CreateDistributionInput, CreateMarketResearchInput, CreateMissionInput, CreatePerformanceInput, CreateProjectInput, CreateTaskInput, DistributionCampaign, GenerateContentInput, HealthResponse, LearningInsight, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, PerformanceRecord, Project, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
+import { ContentStudio, DistributionCenter, GitHubPlugin, LearningEngine, MarketIntelligence, PluginRuntime, ScaleEngine, type AtlasCore } from "@atlas/core";
+import type { AffiliateOffer, ContentAsset, ContentPlan, CreateContentPlanInput, CreateDistributionInput, CreateMarketResearchInput, CreateMissionInput, CreatePerformanceInput, CreateProjectInput, CreateScalePolicyInput, CreateScaleProposalInput, CreateTaskInput, DistributionCampaign, GenerateContentInput, HealthResponse, LearningInsight, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, PerformanceRecord, Project, ScalePolicy, ScaleProposal, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -22,7 +22,7 @@ const taskBody = { type: "object", additionalProperties: false, required: ["titl
 const taskPatch = { type: "object", additionalProperties: false, minProperties: 1, properties: { ...taskBody.properties, completed: { type: "boolean" } } } as const;
 const missionBody = { type: "object", additionalProperties: false, required: ["title", "objective"], properties: { title: { type: "string", minLength: 1, maxLength: 160, pattern: "\\S" }, objective: { type: "string", minLength: 10, maxLength: 2000, pattern: "\\S" }, context: { type: "string", maxLength: 5000 } } } as const;
 
-export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; content?: ContentStudio; distribution?: DistributionCenter; learning?: LearningEngine; logger?: boolean };
+export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; content?: ContentStudio; distribution?: DistributionCenter; learning?: LearningEngine; scale?: ScaleEngine; logger?: boolean };
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: dependencies.logger ?? true, bodyLimit: 64 * 1024 });
@@ -41,7 +41,9 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const content = dependencies.content ?? new ContentStudio({ plans: createSqliteStore<ContentPlan>(database, "content_plans"), assets: contentAssetStore }, opportunityStore, atlas.guardian, atlas.agentRuntime, atlas.permissions);
   const campaignStore = createSqliteStore<DistributionCampaign>(database, "distribution_campaigns");
   const distribution = dependencies.distribution ?? new DistributionCenter(campaignStore, contentAssetStore, atlas.guardian, atlas.agentRuntime, atlas.permissions);
-  const learning = dependencies.learning ?? new LearningEngine(createSqliteStore<PerformanceRecord>(database, "performance_records"), createSqliteStore<LearningInsight>(database, "learning_insights"), campaignStore, atlas.guardian, atlas.agentRuntime, atlas.permissions);
+  const performanceStore = createSqliteStore<PerformanceRecord>(database, "performance_records"); const insightStore = createSqliteStore<LearningInsight>(database, "learning_insights");
+  const learning = dependencies.learning ?? new LearningEngine(performanceStore, insightStore, campaignStore, atlas.guardian, atlas.agentRuntime, atlas.permissions);
+  const scale = dependencies.scale ?? new ScaleEngine(createSqliteStore<ScalePolicy>(database, "scale_policies"), createSqliteStore<ScaleProposal>(database, "scale_proposals"), insightStore, performanceStore, atlas.guardian, atlas.agentRuntime, atlas.permissions);
   const existingAdmin = await auth.firstAdmin(); if (existingAdmin) await Promise.all([projects.claimUnowned(existingAdmin.id), tasks.claimUnowned(existingAdmin.id)]);
   const authenticate = (authorization?: string) => { try { const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : ""; return token ? auth.verify(token) : null; } catch { return null; } };
   atlas.permissions.grant("plugin:github", ["network.github.read"]);
@@ -50,7 +52,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   plugins.register(github);
   await plugins.load("github");
   await atlas.start();
-  app.addHook("onClose", async () => { learning.close(); distribution.close(); content.close(); market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
+  app.addHook("onClose", async () => { scale.close(); learning.close(); distribution.close(); content.close(); market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
   const allowedOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
   await app.register(cors, { origin: allowedOrigin, methods: ["GET", "POST", "PATCH", "DELETE"] });
 
@@ -63,10 +65,10 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/health", async (_request, reply): Promise<HealthResponse> => {
     try {
       if (atlas.status().lifecycle !== "running") throw new Error("Atlas Core is not running");
-      return { status: "ok", service: "atlas-api", version: "0.8.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
+      return { status: "ok", service: "atlas-api", version: "0.9.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
     } catch (error) {
       app.log.error({ err: error }, "health storage check failed");
-      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "0.8.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
+      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "0.9.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
     }
   });
 
@@ -122,6 +124,12 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/learning/performance", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? learning.listRecords(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.post<{ Params: { opportunityId: string } }>("/learning/opportunities/:opportunityId/analyze", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { return await learning.learn(user.id, request.params.opportunityId); } catch (error) { return reply.code(400).send({ error: "LEARNING_ERROR", message: error instanceof Error ? error.message : "Learning failed", statusCode: 400 }); } });
   app.get("/learning/insights", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? learning.listInsights(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.post<{ Body: CreateScalePolicyInput }>("/scale/policies", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { return reply.code(201).send(await scale.createPolicy(user.id, request.body)); } catch (error) { return reply.code(400).send({ error: "POLICY_ERROR", message: error instanceof Error ? error.message : "Policy creation failed", statusCode: 400 }); } });
+  app.get("/scale/policies", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? scale.listPolicies(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.post<{ Body: CreateScaleProposalInput }>("/scale/proposals", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { return reply.code(201).send(await scale.propose(user.id, request.body)); } catch (error) { return reply.code(400).send({ error: "SCALE_ERROR", message: error instanceof Error ? error.message : "Scale proposal failed", statusCode: 400 }); } });
+  app.get("/scale/proposals", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? scale.listProposals(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.post<{ Params: { id: string }; Body: { status: "approved" | "rejected" } }>("/scale/proposals/:id/review", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); if (!['approved', 'rejected'].includes(request.body?.status)) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Status must be approved or rejected", statusCode: 400 }); try { return (await scale.review(user.id, request.params.id, request.body.status)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Scale proposal not found", statusCode: 404 }); } catch (error) { return reply.code(409).send({ error: "INVALID_STATE", message: error instanceof Error ? error.message : "Review failed", statusCode: 409 }); } });
+  app.post<{ Params: { id: string } }>("/scale/proposals/:id/simulate", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { return (await scale.simulate(user.id, request.params.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Scale proposal not found", statusCode: 404 }); } catch (error) { return reply.code(409).send({ error: "INVALID_STATE", message: error instanceof Error ? error.message : "Simulation failed", statusCode: 409 }); } });
   app.get("/missions", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? atlas.listMissions(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.get<{ Params: { id: string } }>("/missions/:id", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return (await atlas.getMission(request.params.id, user.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Mission not found.", statusCode: 404 }); });
   app.post<{ Body: CreateMissionInput }>("/missions", { schema: { body: missionBody } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return reply.code(201).send(await atlas.createMission({ title: request.body.title.trim(), objective: request.body.objective.trim(), context: request.body.context?.trim() ?? "", ownerId: user.id })); });
