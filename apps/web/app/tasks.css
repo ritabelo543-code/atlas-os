@@ -1,0 +1,4 @@
+.task-form{display:flex;gap:8px;flex-wrap:wrap}.task-form input:first-child{flex:1;min-width:160px}.task-form select,.task-form input{border:1px solid #e8e8e2;border-radius:8px;padding:9px}.task{display:flex!important;align-items:center;gap:10px;padding:10px 0!important;margin:0!important;border-bottom:1px solid #eee}.task small{margin-left:auto}.priority.high{color:#b24343;font-weight:bold}.priority.low{color:#427368}.done{text-decoration:line-through;color:#777a78}
+.agenda{margin-bottom:28px}.agenda-item{display:grid;grid-template-columns:80px 1fr auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid #eee;font-size:13px}.agenda-item span{color:#427368;font-weight:700}.agenda-item small{font-size:11px}
+.delete-task{border:0;background:transparent;color:#a55;cursor:pointer;font-size:16px;padding:0 4px}
+.edit-task{border:0;background:transparent;color:#427368;cursor:pointer;font-size:16px;padding:0 4px}

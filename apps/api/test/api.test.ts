@@ -1,0 +1,92 @@
+import assert from "node:assert/strict";
+import { afterEach, test } from "node:test";
+import type { Project, Task } from "@atlas/types";
+import type { AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
+import { AtlasCore, MockAiProvider } from "@atlas/core";
+import { buildApp } from "../src/app.js";
+import type { JsonStore } from "../src/lib/storage.js";
+import { ProjectRepository } from "../src/repositories/ProjectRepository.js";
+import { TaskRepository } from "../src/repositories/TaskRepository.js";
+import { ProjectService } from "../src/services/ProjectService.js";
+import { TaskService } from "../src/services/TaskService.js";
+
+const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
+function memoryStore<T>(initial: T[] = []): JsonStore<T> {
+  let values = structuredClone(initial);
+  return { load: async () => structuredClone(values), save: async (next) => { values = structuredClone(next); } };
+}
+async function testApp() {
+  const projects = new ProjectService(new ProjectRepository(memoryStore<Project>()));
+  const tasks = new TaskService(new TaskRepository(memoryStore<Task>()));
+  const atlas = new AtlasCore(new MockAiProvider(), { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
+  const app = await buildApp({ projects, tasks, atlas, logger: false });
+  apps.push(app);
+  return app;
+}
+afterEach(async () => { await Promise.all(apps.splice(0).map((app) => app.close())); });
+
+test("health reports API and storage readiness", async () => {
+  const response = await (await testApp()).inject({ method: "GET", url: "/health" });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().status, "ok");
+  assert.equal(response.json().storage, "ok");
+});
+
+test("mission flow returns a structured decision and history", async () => {
+  const app = await testApp();
+  const created = await app.inject({ method: "POST", url: "/missions", payload: { title: "Mercado B2B", objective: "Analisar uma oportunidade de mercado", context: "SaaS para pequenas equipes" } });
+  assert.equal(created.statusCode, 201);
+  const mission = created.json<Mission>();
+  const executed = await app.inject({ method: "POST", url: `/missions/${mission.id}/execute` });
+  assert.equal(executed.statusCode, 200);
+  const decision = executed.json<Decision>();
+  assert.ok(decision.recommendation);
+  assert.ok(decision.rationale);
+  assert.ok(decision.nextSteps.length);
+  assert.equal((await app.inject({ method: "GET", url: "/missions" })).json<Mission[]>()[0]?.status, "completed");
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().ai.mode, "mock");
+});
+
+test("a related mission reuses persistent memory from the previous mission", async () => {
+  const app = await testApp();
+  const first = (await app.inject({ method: "POST", url: "/missions", payload: { title: "Mercado B2B", objective: "Analisar demanda para um produto B2B", context: "Pequenas equipes SaaS" } })).json<Mission>();
+  const firstDecision = (await app.inject({ method: "POST", url: `/missions/${first.id}/execute` })).json<Decision>();
+  assert.deepEqual(firstDecision.memoryIds, []);
+  const second = (await app.inject({ method: "POST", url: "/missions", payload: { title: "Piloto B2B", objective: "Planejar piloto do produto B2B", context: "Pequenas equipes SaaS" } })).json<Mission>();
+  const secondDecision = (await app.inject({ method: "POST", url: `/missions/${second.id}/execute` })).json<Decision>();
+  assert.equal(secondDecision.memoryIds?.length, 1);
+  assert.match(secondDecision.rationale, /1 memória/);
+  const operation = (await app.inject({ method: "GET", url: "/atlas/operation" })).json();
+  assert.equal(operation.counts.memory, 2);
+});
+
+test("project and task lifecycle works end to end", async () => {
+  const app = await testApp();
+  const createdProject = await app.inject({ method: "POST", url: "/projects", payload: { name: " Mission Alpha ", description: "MVP" } });
+  assert.equal(createdProject.statusCode, 201);
+  const project = createdProject.json<Project>();
+  assert.equal(project.name, "Mission Alpha");
+
+  const createdTask = await app.inject({ method: "POST", url: `/projects/${project.id}/tasks`, payload: { title: "Decide scope", priority: "high", dueDate: "2026-08-10" } });
+  assert.equal(createdTask.statusCode, 201);
+  const task = createdTask.json<Task>();
+  assert.equal(task.projectId, project.id);
+
+  const updated = await app.inject({ method: "PATCH", url: `/tasks/${task.id}`, payload: { completed: true } });
+  assert.equal(updated.statusCode, 200);
+  assert.equal(updated.json<Task>().completed, true);
+
+  assert.equal((await app.inject({ method: "GET", url: `/projects/${project.id}/tasks` })).json<Task[]>().length, 1);
+  assert.equal((await app.inject({ method: "DELETE", url: `/projects/${project.id}` })).statusCode, 204);
+  assert.equal((await app.inject({ method: "GET", url: "/tasks" })).json<Task[]>().length, 0);
+});
+
+test("validation and not-found errors are consistent", async () => {
+  const app = await testApp();
+  const invalid = await app.inject({ method: "POST", url: "/projects", payload: { name: "   ", unknown: true } });
+  assert.equal(invalid.statusCode, 400);
+  assert.equal(invalid.json().error, "VALIDATION_ERROR");
+  const missing = await app.inject({ method: "PATCH", url: "/tasks/missing", payload: { completed: true } });
+  assert.equal(missing.statusCode, 404);
+  assert.equal(missing.json().error, "NOT_FOUND");
+});
