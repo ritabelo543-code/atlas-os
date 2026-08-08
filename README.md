@@ -35,6 +35,17 @@ Endpoints autenticados:
 
 As coleções `market_research`, `market_evidence`, `market_signals`, `market_offers` e `market_opportunities` são persistidas transacionalmente no mesmo SQLite. O Guardian registra autor, entradas principais, fontes, resultado, duração e versão da lógica.
 
+## Conteúdo automatizado v0.6
+
+O Content Studio em `http://localhost:3000/content` transforma uma oportunidade do ranking em plano editorial e peças comerciais revisáveis. A geração atual é local e determinística, cria variações de título/hook/CTA, disclosure de afiliado e briefings visuais, e nunca publica automaticamente.
+
+- `POST/GET /content/plans`: cria e lista planos editoriais do usuário.
+- `POST/GET /content/assets`: gera e lista peças comerciais.
+- `GET /content/assets/:id`: recupera uma peça com isolamento por proprietário.
+- `PATCH /content/assets/:id/review`: aprova ou rejeita uma peça antes da distribuição.
+
+As coleções `content_plans` e `content_assets` são persistidas no SQLite e auditadas pelo Guardian.
+
 ## Atlas v0.4
 
 O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.

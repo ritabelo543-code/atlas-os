@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
-import { GitHubPlugin, MarketIntelligence, PluginRuntime, type AtlasCore } from "@atlas/core";
-import type { AffiliateOffer, CreateMarketResearchInput, CreateMissionInput, CreateProjectInput, CreateTaskInput, HealthResponse, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, Project, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
+import { ContentStudio, GitHubPlugin, MarketIntelligence, PluginRuntime, type AtlasCore } from "@atlas/core";
+import type { AffiliateOffer, ContentAsset, ContentPlan, CreateContentPlanInput, CreateMarketResearchInput, CreateMissionInput, CreateProjectInput, CreateTaskInput, GenerateContentInput, HealthResponse, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, Project, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -22,7 +22,7 @@ const taskBody = { type: "object", additionalProperties: false, required: ["titl
 const taskPatch = { type: "object", additionalProperties: false, minProperties: 1, properties: { ...taskBody.properties, completed: { type: "boolean" } } } as const;
 const missionBody = { type: "object", additionalProperties: false, required: ["title", "objective"], properties: { title: { type: "string", minLength: 1, maxLength: 160, pattern: "\\S" }, objective: { type: "string", minLength: 10, maxLength: 2000, pattern: "\\S" }, context: { type: "string", maxLength: 5000 } } } as const;
 
-export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; logger?: boolean };
+export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; content?: ContentStudio; logger?: boolean };
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: dependencies.logger ?? true, bodyLimit: 64 * 1024 });
@@ -35,7 +35,9 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const projects = dependencies.projects ?? new ProjectService(new ProjectRepository(projectStore!));
   const tasks = dependencies.tasks ?? new TaskService(new TaskRepository(taskStore!));
   const auth = dependencies.auth ?? new AuthService(createSqliteStore<StoredUser>(database, "users"), authSecret(database));
-  const market = dependencies.market ?? new MarketIntelligence({ research: createSqliteStore<MarketResearch>(database, "market_research"), evidence: createSqliteStore<MarketEvidence & { ownerId: string; researchId: string }>(database, "market_evidence"), signals: createSqliteStore<MarketSignal>(database, "market_signals"), offers: createSqliteStore<AffiliateOffer>(database, "market_offers"), opportunities: createSqliteStore<MarketOpportunity>(database, "market_opportunities") }, atlas.guardian, atlas.agentRuntime, atlas.permissions);
+  const opportunityStore = createSqliteStore<MarketOpportunity>(database, "market_opportunities");
+  const market = dependencies.market ?? new MarketIntelligence({ research: createSqliteStore<MarketResearch>(database, "market_research"), evidence: createSqliteStore<MarketEvidence & { ownerId: string; researchId: string }>(database, "market_evidence"), signals: createSqliteStore<MarketSignal>(database, "market_signals"), offers: createSqliteStore<AffiliateOffer>(database, "market_offers"), opportunities: opportunityStore }, atlas.guardian, atlas.agentRuntime, atlas.permissions);
+  const content = dependencies.content ?? new ContentStudio({ plans: createSqliteStore<ContentPlan>(database, "content_plans"), assets: createSqliteStore<ContentAsset>(database, "content_assets") }, opportunityStore, atlas.guardian, atlas.agentRuntime, atlas.permissions);
   const existingAdmin = await auth.firstAdmin(); if (existingAdmin) await Promise.all([projects.claimUnowned(existingAdmin.id), tasks.claimUnowned(existingAdmin.id)]);
   const authenticate = (authorization?: string) => { try { const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : ""; return token ? auth.verify(token) : null; } catch { return null; } };
   atlas.permissions.grant("plugin:github", ["network.github.read"]);
@@ -44,7 +46,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   plugins.register(github);
   await plugins.load("github");
   await atlas.start();
-  app.addHook("onClose", async () => { market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
+  app.addHook("onClose", async () => { content.close(); market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
   const allowedOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
   await app.register(cors, { origin: allowedOrigin, methods: ["GET", "POST", "PATCH", "DELETE"] });
 
@@ -57,10 +59,10 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/health", async (_request, reply): Promise<HealthResponse> => {
     try {
       if (atlas.status().lifecycle !== "running") throw new Error("Atlas Core is not running");
-      return { status: "ok", service: "atlas-api", version: "0.5.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
+      return { status: "ok", service: "atlas-api", version: "0.6.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
     } catch (error) {
       app.log.error({ err: error }, "health storage check failed");
-      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "0.5.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
+      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "0.6.0", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
     }
   });
 
@@ -71,8 +73,8 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/atlas/status", async () => atlas.status());
   app.get("/atlas/operation", async (request, reply) => {
     const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 });
-    const [missions, decisions, knowledge, memory, audit, opportunities, research] = await Promise.all([atlas.listMissions(user.id), atlas.listDecisions(user.id), atlas.listKnowledge(user.id), atlas.listMemory(user.id), atlas.listAudit(), market.listOpportunities(user.id), market.listResearch(user.id)]);
-    return { status: atlas.status(), counts: { opportunities: opportunities.length, research: research.length, missions: missions.length, decisions: decisions.length, knowledge: knowledge.length, memory: memory.length, audit: audit.filter((entry) => entry.context.ownerId === user.id).length, agents: atlas.agentRuntime.listAgents().length, executions: atlas.agentRuntime.listExecutions().filter((item) => item.ownerId === user.id).length, plugins: plugins.list().length }, uptimeSeconds: Math.floor(process.uptime()), lastExecutionAt: research[0]?.completedAt ?? decisions[0]?.createdAt ?? null };
+    const [missions, decisions, knowledge, memory, audit, opportunities, research, plans, assets] = await Promise.all([atlas.listMissions(user.id), atlas.listDecisions(user.id), atlas.listKnowledge(user.id), atlas.listMemory(user.id), atlas.listAudit(), market.listOpportunities(user.id), market.listResearch(user.id), content.listPlans(user.id), content.listAssets(user.id)]);
+    return { status: atlas.status(), counts: { opportunities: opportunities.length, research: research.length, contentPlans: plans.length, contentAssets: assets.length, approvedContent: assets.filter((item) => item.status === "approved").length, missions: missions.length, decisions: decisions.length, knowledge: knowledge.length, memory: memory.length, audit: audit.filter((entry) => entry.context.ownerId === user.id).length, agents: atlas.agentRuntime.listAgents().length, executions: atlas.agentRuntime.listExecutions().filter((item) => item.ownerId === user.id).length, plugins: plugins.list().length }, uptimeSeconds: Math.floor(process.uptime()), lastExecutionAt: assets[0]?.updatedAt ?? research[0]?.completedAt ?? decisions[0]?.createdAt ?? null };
   });
   app.get("/atlas/logs", async (request) => {
     const query = request.query as { module?: string; severity?: string; from?: string };
@@ -100,6 +102,12 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/market/offers", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? market.listOffers(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.get("/market/opportunities", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? market.listOpportunities(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.get<{ Params: { id: string } }>("/market/opportunities/:id", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return (await market.getOpportunity(request.params.id, user.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Opportunity not found", statusCode: 404 }); });
+  app.post<{ Body: CreateContentPlanInput }>("/content/plans", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); const body = request.body; if (!body?.opportunityId || !body.objective?.trim() || !body.funnelStage || !Array.isArray(body.channels) || !body.channels.length || !body.tone?.trim()) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Opportunity, objective, funnel stage, channel and tone are required", statusCode: 400 }); try { return reply.code(201).send(await content.createPlan(user.id, body)); } catch (error) { return reply.code(404).send({ error: "NOT_FOUND", message: error instanceof Error ? error.message : "Content plan failed", statusCode: 404 }); } });
+  app.get("/content/plans", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? content.listPlans(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.post<{ Body: GenerateContentInput }>("/content/assets", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); const body = request.body; if (!body?.planId || !body.channel || !body.format) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Plan, channel and format are required", statusCode: 400 }); try { return reply.code(201).send(await content.generate(user.id, body)); } catch (error) { return reply.code(400).send({ error: "CONTENT_ERROR", message: error instanceof Error ? error.message : "Content generation failed", statusCode: 400 }); } });
+  app.get("/content/assets", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? content.listAssets(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.get<{ Params: { id: string } }>("/content/assets/:id", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return (await content.getAsset(request.params.id, user.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Content asset not found", statusCode: 404 }); });
+  app.patch<{ Params: { id: string }; Body: { status: "approved" | "rejected"; notes?: string } }>("/content/assets/:id/review", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); if (!['approved', 'rejected'].includes(request.body?.status)) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Review status must be approved or rejected", statusCode: 400 }); return (await content.review(user.id, request.params.id, request.body.status, request.body.notes)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Content asset not found", statusCode: 404 }); });
   app.get("/missions", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? atlas.listMissions(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.get<{ Params: { id: string } }>("/missions/:id", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return (await atlas.getMission(request.params.id, user.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Mission not found.", statusCode: 404 }); });
   app.post<{ Body: CreateMissionInput }>("/missions", { schema: { body: missionBody } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return reply.code(201).send(await atlas.createMission({ title: request.body.title.trim(), objective: request.body.objective.trim(), context: request.body.context?.trim() ?? "", ownerId: user.id })); });

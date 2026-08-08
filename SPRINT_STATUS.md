@@ -26,6 +26,24 @@ A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, p
 - Builds do Core, API, Web e monorepo aprovados.
 - Smoke autenticado criou uma pesquisa simulada, 1 sinal, 1 oferta e 1 oportunidade, recuperou o ranking e o histórico após persistência.
 
+## Sprint v0.6 — CONCLUÍDA
+
+- Content Strategy, Copywriting, SEO e Content Review Agents executados pelo Agent Runtime.
+- Planos editoriais vinculados obrigatoriamente a oportunidade, oferta, público, canal e etapa do funil.
+- Geração de artigos, posts, e-mails, roteiros, landing pages e briefings criativos.
+- Três variações transparentes de título, hook e CTA por peça, sem garantias de resultado.
+- Disclosure de afiliado incorporado ao conteúdo gerado.
+- Fila de revisão com aprovação ou rejeição humana antes de qualquer distribuição.
+- Persistência SQLite, auditoria Guardian e isolamento multiusuário para planos e ativos.
+- Content Studio disponível em `/content`; nenhuma publicação externa foi implementada.
+
+### Validação v0.6
+
+- Core: 7 testes aprovados; API: 12 testes aprovados.
+- Build Web aprovado, incluindo a rota estática `/content`.
+- Fluxo autenticado aprovado: oportunidade → plano → roteiro → revisão → aprovação.
+- Geração atual é determinística (`local-content-rules`), claramente identificada; não utiliza IA externa nem produz mídia final.
+
 ## Sprint v0.4 — CONCLUÍDA
 
 - Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
@@ -133,4 +151,4 @@ Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponí
 
 ## Próxima etapa
 
-v0.6 — Conteúdo Automatizado, sempre vinculado a uma oportunidade, produto, público, canal e etapa de funil. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.
+v0.7 — Distribuição Automática, com publicação e agendamento multicanal protegidos por aprovação, permissões e rastreamento. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.
