@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import type { ContentAsset, ContentPlan, DistributionCampaign, MarketOpportunity, Project, Task } from "@atlas/types";
+import type { ContentAsset, ContentPlan, DistributionCampaign, LearningInsight, MarketOpportunity, PerformanceRecord, Project, Task } from "@atlas/types";
 import type { AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
-import { AgentRuntime, AtlasCore, ContentStudio, DistributionCenter, Guardian, MarketIntelligence, MockAiProvider, PermissionManager } from "@atlas/core";
+import { AgentRuntime, AtlasCore, ContentStudio, DistributionCenter, Guardian, LearningEngine, MarketIntelligence, MockAiProvider, PermissionManager } from "@atlas/core";
 import { buildApp } from "../src/app.js";
 import type { JsonStore } from "../src/lib/storage.js";
 import { ProjectRepository } from "../src/repositories/ProjectRepository.js";
@@ -24,8 +24,8 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const opportunityStore = memoryStore<MarketOpportunity>(); const runtime = new AgentRuntime(); const permissions = new PermissionManager(); const guardian = new Guardian(memoryStore<AuditEntry>());
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions);
   const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions);
-  const distribution = new DistributionCenter(memoryStore<DistributionCampaign>(), contentAssetStore, guardian, runtime, permissions);
-  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, logger: false });
+  const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions); const learning = new LearningEngine(memoryStore<PerformanceRecord>(), memoryStore<LearningInsight>(), campaignStore, guardian, runtime, permissions);
+  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, logger: false });
   apps.push(app);
   return app;
 }
@@ -79,7 +79,7 @@ test("agent, plugin and performance operation endpoints expose v0.3 runtime", as
   assert.equal((await app.inject({ method: "GET", url: "/atlas/agents" })).json()[0].name, "Atlas Executive Agent");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/plugins" })).json()[0].status, "loaded");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/performance", headers })).json().executions, 0);
-  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "0.7.0");
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "0.8.0");
 });
 
 test("market research ranks traceable simulated opportunities and isolates users", async () => {
@@ -109,7 +109,11 @@ test("distribution requires approved content, tracks links, dry-runs and isolate
   await app.inject({ method: "PATCH", url: `/content/assets/${asset.id}/review`, headers: owner, payload: { status: "approved" } });
   const created = await app.inject({ method: "POST", url: "/distribution/campaigns", headers: owner, payload: { assetId: asset.id, channel: "youtube", destination: "Canal demo", scheduledAt: "2026-08-09T12:00:00.000Z", targetUrl: "https://example.com/offer", campaignName: "Teste v0.7" } }); assert.equal(created.statusCode, 201); const campaign = created.json<DistributionCampaign>(); assert.equal(campaign.mode, "dry_run"); assert.match(campaign.trackingUrl, /utm_source=youtube/);
   await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/approve`, headers: owner }); await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/schedule`, headers: owner }); const executed = await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/execute`, headers: owner }); assert.equal(executed.json().status, "completed"); assert.equal(executed.json().result.delivered, false);
+  const confirmed = await app.inject({ method: "POST", url: "/learning/performance", headers: owner, payload: { campaignId: campaign.id, metrics: { impressions: 1000, clicks: 100, conversions: 10, cost: 50, revenue: 150 }, dataKind: "confirmed", source: "fixture", observedAt: "2026-08-09T13:00:00.000Z" } }); assert.equal(confirmed.statusCode, 400);
+  const performance = await app.inject({ method: "POST", url: "/learning/performance", headers: owner, payload: { campaignId: campaign.id, metrics: { impressions: 1000, clicks: 100, conversions: 10, cost: 50, revenue: 150 }, dataKind: "simulated", source: "fixture:v0.8", observedAt: "2026-08-09T13:00:00.000Z" } }); assert.equal(performance.statusCode, 201); assert.equal(performance.json().ctr, 10); assert.equal(performance.json().conversionRate, 10); assert.equal(performance.json().roi, 200); assert.equal(performance.json().profit, 100);
+  const insight = await app.inject({ method: "POST", url: `/learning/opportunities/${opportunityId}/analyze`, headers: owner }); assert.equal(insight.statusCode, 200); assert.equal(insight.json().dataKind, "simulated"); assert.match(insight.json().recommendation, /teste controlado/);
   assert.equal((await app.inject({ method: "GET", url: "/distribution/campaigns", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: `/distribution/campaigns/${campaign.id}`, headers: outsider })).statusCode, 404);
+  assert.equal((await app.inject({ method: "GET", url: "/learning/performance", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: "/learning/insights", headers: outsider })).json().length, 0);
 });
 
 test("authentication isolates missions between users", async () => {

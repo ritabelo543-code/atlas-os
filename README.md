@@ -58,6 +58,16 @@ O Distribution Center em `http://localhost:3000/distribution` prepara campanhas 
 
 O modo `live` é recusado até existir um conector real do canal e autorização explícita.
 
+## Aprendizado contínuo v0.8
+
+O Learning Engine em `http://localhost:3000/learning` registra métricas, calcula CTR, conversão, CAC, ROI e lucro, compara experimentos e recomenda o próximo teste. Dados simulados permanecem explicitamente simulados.
+
+- `POST/GET /learning/performance`: registra e lista desempenho.
+- `POST /learning/opportunities/:opportunityId/analyze`: compara resultados e gera insight.
+- `GET /learning/insights`: lista recomendações rastreáveis.
+
+Campanhas em `dry_run` não podem produzir métricas confirmadas.
+
 ## Atlas v0.4
 
 O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.

@@ -38,12 +38,14 @@ Entregue com geração textual determinística e rastreável, aprovação humana
 
 O núcleo de campanha, aprovação, agendamento, UTMs e execução auditada foi entregue em `dry_run`. Conectores e publicação real permanecem bloqueados até configuração de credenciais, políticas de cada canal e autorização explícita.
 
-## v0.8 — Aprendizado Contínuo
+## v0.8 — Aprendizado Contínuo — CONCLUÍDA
 
 - Analytics e Optimization Agents.
 - Memória operacional de campanhas, criativos, públicos, horários e ofertas.
 - Aprendizado por CTR, conversão, CAC, ROI, receita e lucro.
 - Comparação de experimentos e recomendações automáticas de melhoria.
+
+O motor diferencia dados confirmados, calculados e simulados. Campanhas `dry_run` não podem registrar desempenho confirmado nem gerar falsa evidência de vendas.
 
 ## v0.9 — Escala Inteligente
 

@@ -62,6 +62,25 @@ A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, p
 - Teste ponta a ponta aprovado: conteúdo não aprovado recusado; conteúdo aprovado convertido em campanha, aprovado, agendado e executado em simulação.
 - UTMs, estados operacionais e isolamento entre contas confirmados.
 
+## Sprint v0.8 — CONCLUÍDA
+
+- Analytics e Optimization Agents adicionados ao Agent Runtime.
+- Registro rastreável de impressões, cliques, conversões, custo e receita.
+- Cálculo de CTR, taxa de conversão, CAC, ROI e lucro.
+- Comparação de experimentos por oportunidade e recomendação de repetir ou revisar.
+- Confiança e natureza dos dados preservadas em cada insight.
+- Campanhas `dry_run` impedidas de registrar métricas `confirmed`.
+- Persistência SQLite, auditoria Guardian e isolamento multiusuário.
+- Learning Engine disponível em `/learning`.
+
+### Validação v0.8
+
+- Core: 7 testes aprovados; API: 13 testes aprovados.
+- Build integral aprovado, incluindo `/learning`.
+- Métrica confirmada em campanha simulada recusada.
+- Métricas simuladas calcularam CTR 10%, conversão 10%, ROI 200% e lucro 100 no cenário de teste.
+- Insight resultante permaneceu identificado como `simulated` e isolado da segunda conta.
+
 ## Sprint v0.4 — CONCLUÍDA
 
 - Cadastro, login, sessão HMAC e senhas protegidas com `scrypt`.
@@ -169,4 +188,4 @@ Os endpoints existentes de `/health`, `/projects` e `/tasks` permanecem disponí
 
 ## Próxima etapa
 
-v0.8 — Aprendizado Contínuo, usando dados confirmados de campanhas e resultados para comparar criativos e recomendar melhorias. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.
+v0.9 — Escala Inteligente, com regras de orçamento, margem e risco que somente poderão operar sobre dados confirmados. Recuperação de conta, MFA, PostgreSQL distribuído e observabilidade continuam requisitos antes de produção pública, sem substituir a prioridade comercial.

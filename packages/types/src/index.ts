@@ -99,3 +99,8 @@ export type DistributionMode = "dry_run" | "live";
 export type DistributionStatus = "draft" | "approved" | "scheduled" | "completed" | "failed" | "cancelled";
 export type DistributionCampaign = { id: string; ownerId: string; assetId: string; opportunityId: string; channel: ContentChannel; destination: string; scheduledAt: string; status: DistributionStatus; mode: DistributionMode; trackingUrl: string; utm: { source: string; medium: string; campaign: string; content: string }; approvedAt?: string; executedAt?: string; externalId?: string; result?: { delivered: boolean; detail: string }; createdAt: string; updatedAt: string };
 export type CreateDistributionInput = { assetId: string; channel: ContentChannel; destination: string; scheduledAt: string; targetUrl: string; campaignName: string; mode?: DistributionMode };
+
+export type CampaignMetrics = { impressions: number; clicks: number; conversions: number; cost: number; revenue: number };
+export type PerformanceRecord = { id: string; ownerId: string; campaignId: string; assetId: string; opportunityId: string; metrics: CampaignMetrics; ctr: number; conversionRate: number; cac: number | null; roi: number | null; profit: number; dataKind: EvidenceValueKind; source: string; observedAt: string; createdAt: string };
+export type LearningInsight = { id: string; ownerId: string; opportunityId: string; recordIds: string[]; winnerRecordId?: string; summary: string; recommendation: string; confidence: number; dataKind: EvidenceValueKind; createdAt: string };
+export type CreatePerformanceInput = { campaignId: string; metrics: CampaignMetrics; dataKind: EvidenceValueKind; source: string; observedAt: string };
