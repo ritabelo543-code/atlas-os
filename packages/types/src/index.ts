@@ -91,7 +91,7 @@ export type ContentFormat = "article" | "social-post" | "email" | "video-script"
 export type ContentStatus = "draft" | "in_review" | "approved" | "rejected";
 export type ContentPlan = { id: string; ownerId: string; opportunityId: string; offerId?: string; audience: string; painOrDesire: string; objective: string; funnelStage: FunnelStage; channels: ContentChannel[]; keywords: string[]; tone: string; status: "active" | "completed"; createdAt: string; updatedAt: string };
 export type ContentVariant = { title: string; hook: string; cta: string };
-export type ContentAsset = { id: string; ownerId: string; planId: string; opportunityId: string; channel: ContentChannel; format: ContentFormat; title: string; body: string; cta: string; keywords: string[]; variants: ContentVariant[]; designBrief?: string; status: ContentStatus; generatedBy: string[]; generationMode: "deterministic" | "ai"; createdAt: string; updatedAt: string; reviewedAt?: string; reviewNotes?: string };
+export type ContentAsset = { id: string; ownerId: string; planId: string; opportunityId: string; channel: ContentChannel; format: ContentFormat; title: string; body: string; cta: string; keywords: string[]; variants: ContentVariant[]; designBrief?: string; status: ContentStatus; generatedBy: string[]; generationMode: "deterministic" | "ai"; provider?: string; model?: string; createdAt: string; updatedAt: string; reviewedAt?: string; reviewNotes?: string };
 export type CreateContentPlanInput = { opportunityId: string; objective: string; funnelStage: FunnelStage; channels: ContentChannel[]; keywords: string[]; tone: string };
 export type GenerateContentInput = { planId: string; channel: ContentChannel; format: ContentFormat; instructions?: string };
 

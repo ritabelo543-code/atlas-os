@@ -23,7 +23,7 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const auth = new AuthService(memoryStore<StoredUser>(), "test-secret");
   const opportunityStore = memoryStore<MarketOpportunity>(); const runtime = new AgentRuntime(); const permissions = new PermissionManager(); const guardian = new Guardian(memoryStore<AuditEntry>());
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions);
-  const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions);
+  const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions, provider);
   const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
   const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, logger: false });
   apps.push(app);
@@ -112,6 +112,28 @@ test("content studio creates, generates, reviews and isolates commercial assets"
   assert.equal(assetResponse.statusCode, 201); const asset = assetResponse.json<ContentAsset>(); assert.equal(asset.status, "in_review"); assert.equal(asset.variants.length, 3); assert.match(asset.body, /Transparência/); assert.equal(asset.generationMode, "deterministic");
   const reviewed = await app.inject({ method: "PATCH", url: `/content/assets/${asset.id}/review`, headers: owner, payload: { status: "approved", notes: "Revisado" } }); assert.equal(reviewed.json().status, "approved");
   assert.equal((await app.inject({ method: "GET", url: "/content/assets", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: `/content/assets/${asset.id}`, headers: outsider })).statusCode, 404);
+});
+
+test("content generation uses a live AI provider when available and records provider/model", async () => {
+  const aiProvider: AiProvider = { name: "anthropic", model: "claude-sonnet-5", mode: "live", generate: async () => { throw new Error("not used in this test"); }, generateContent: async () => ({ title: "Título gerado por IA", body: "Corpo gerado pela IA real.", cta: "Saiba mais", variants: [{ title: "V1", hook: "H1", cta: "C1" }, { title: "V2", hook: "H2", cta: "C2" }, { title: "V3", hook: "H3", cta: "C3" }], designBrief: "Brief gerado por IA" }) };
+  const app = await testApp([], [], aiProvider); const owner = await authHeaders(app, "content-ai-owner@example.com");
+  const research = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload: { query: "produtividade", market: "Software", niche: "produtividade", audience: "profissionais autônomos", painOrDesire: "economizar tempo", channels: ["blog", "youtube"], evidence: [{ source: "fixture:v0.6", observedAt: "2026-08-08T00:00:00.000Z", excerpt: "Demanda simulada crescente", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta Demo", provider: "fixture", notes: "Demonstração" }], metrics: { demand: 80, commercialIntent: 70, competition: 40, monetization: 75, margin: 70, effort: 35, risk: 25, evidenceQuality: 80, confidence: 75, scalability: 80 }, dataKind: "simulated" } });
+  const opportunityId = research.json().opportunities[0].id;
+  const plan = (await app.inject({ method: "POST", url: "/content/plans", headers: owner, payload: { opportunityId, objective: "Apresentar a oferta com transparência", funnelStage: "conversion", channels: ["youtube"], keywords: ["produtividade"], tone: "claro" } })).json<ContentPlan>();
+  const assetResponse = await app.inject({ method: "POST", url: "/content/assets", headers: owner, payload: { planId: plan.id, channel: "youtube", format: "video-script" } });
+  assert.equal(assetResponse.statusCode, 201); const asset = assetResponse.json<ContentAsset>();
+  assert.equal(asset.generationMode, "ai"); assert.equal(asset.provider, "anthropic"); assert.equal(asset.model, "claude-sonnet-5");
+  assert.equal(asset.title, "Título gerado por IA"); assert.match(asset.body, /Transparência/);
+});
+
+test("content generation surfaces AI provider failures as a structured 502, not a generic 400", async () => {
+  const aiProvider: AiProvider = { name: "anthropic", model: "claude-sonnet-5", mode: "live", generate: async () => { throw new Error("not used in this test"); }, generateContent: async () => { throw new AiProviderError("Anthropic provider request failed (400): insufficient credits", 400); } };
+  const app = await testApp([], [], aiProvider); const owner = await authHeaders(app, "content-ai-fail-owner@example.com");
+  const research = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload: { query: "produtividade", market: "Software", niche: "produtividade", audience: "profissionais autônomos", painOrDesire: "economizar tempo", channels: ["blog", "youtube"], evidence: [{ source: "fixture:v0.6", observedAt: "2026-08-08T00:00:00.000Z", excerpt: "Demanda simulada crescente", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta Demo", provider: "fixture", notes: "Demonstração" }], metrics: { demand: 80, commercialIntent: 70, competition: 40, monetization: 75, margin: 70, effort: 35, risk: 25, evidenceQuality: 80, confidence: 75, scalability: 80 }, dataKind: "simulated" } });
+  const opportunityId = research.json().opportunities[0].id;
+  const plan = (await app.inject({ method: "POST", url: "/content/plans", headers: owner, payload: { opportunityId, objective: "Apresentar a oferta com transparência", funnelStage: "conversion", channels: ["youtube"], keywords: ["produtividade"], tone: "claro" } })).json<ContentPlan>();
+  const assetResponse = await app.inject({ method: "POST", url: "/content/assets", headers: owner, payload: { planId: plan.id, channel: "youtube", format: "video-script" } });
+  assert.equal(assetResponse.statusCode, 502); const body = assetResponse.json(); assert.equal(body.error, "AI_PROVIDER_ERROR"); assert.doesNotMatch(JSON.stringify(body), /insufficient credits/);
 });
 
 test("distribution requires approved content, tracks links, dry-runs and isolates users", async () => {
