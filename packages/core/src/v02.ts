@@ -1,16 +1,28 @@
-import type { AiProvider, AiRequest, AiResult, CollectionStore } from "./index.js";
+import type { AiProvider, AiRequest, AiResult, CollectionStore, ContentAiRequest, ContentAiResult } from "./index.js";
 import type { AtlasAgent, MemoryItem, PluginManifest } from "@atlas/types";
 
 export class AiProviderError extends Error {
   constructor(message: string, readonly providerStatus?: number) { super(message); this.name = "AiProviderError"; }
 }
+function parseJson(raw: string): unknown {
+  try { return JSON.parse(raw); } catch { throw new AiProviderError("AI provider returned a response that was not valid JSON"); }
+}
 const AI_SYSTEM_PROMPT = "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array). Reply with only the JSON object, no prose, no markdown fences.";
 function parseAiResult(raw: string): AiResult {
-  const parsed = JSON.parse(raw) as AiResult;
-  if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new Error("AI provider returned an invalid response");
+  const parsed = parseJson(raw) as AiResult;
+  if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new AiProviderError("AI provider returned an invalid response");
   return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) };
 }
 function aiRequestBody(request: AiRequest): unknown { return { mission: { title: request.mission.title, objective: request.mission.objective, context: request.mission.context }, knowledge: request.knowledge, memory: request.memory }; }
+
+const CONTENT_SYSTEM_PROMPT = "Return JSON with title, body, cta (all strings), variants (an array of exactly 3 objects, each with title, hook, cta strings) and optionally designBrief (string). Do not include unverifiable claims or fabricated statistics. Reply with only the JSON object, no prose, no markdown fences.";
+function parseContentResult(raw: string): ContentAiResult {
+  const parsed = parseJson(raw) as ContentAiResult;
+  const validVariants = Array.isArray(parsed.variants) && parsed.variants.length === 3 && parsed.variants.every((variant) => variant && typeof variant.title === "string" && typeof variant.hook === "string" && typeof variant.cta === "string");
+  if (!parsed.title || !parsed.body || !parsed.cta || !validVariants) throw new AiProviderError("AI content provider returned an invalid response");
+  return { title: parsed.title, body: parsed.body, cta: parsed.cta, variants: parsed.variants, designBrief: parsed.designBrief };
+}
+function contentRequestBody(request: ContentAiRequest): unknown { return { opportunity: { market: request.opportunity.market, niche: request.opportunity.niche, audience: request.opportunity.audience, painOrDesire: request.opportunity.painOrDesire }, plan: { objective: request.plan.objective, funnelStage: request.plan.funnelStage, tone: request.plan.tone, keywords: request.plan.keywords }, channel: request.channel, format: request.format, instructions: request.instructions }; }
 
 export class AnthropicAiProvider implements AiProvider {
   readonly name = "anthropic"; readonly mode = "live" as const;
@@ -18,7 +30,9 @@ export class AnthropicAiProvider implements AiProvider {
   constructor(readonly model: string, private readonly apiKey: string, private readonly baseUrl = "https://api.anthropic.com/v1", options: { timeoutMs?: number; maxRetries?: number } = {}) {
     this.timeoutMs = options.timeoutMs ?? 20_000; this.maxRetries = options.maxRetries ?? 2;
   }
-  async generate(request: AiRequest): Promise<AiResult> {
+  async generate(request: AiRequest): Promise<AiResult> { return parseAiResult(await this.callMessages(AI_SYSTEM_PROMPT, aiRequestBody(request), 1024)); }
+  async generateContent(request: ContentAiRequest): Promise<ContentAiResult> { return parseContentResult(await this.callMessages(CONTENT_SYSTEM_PROMPT, contentRequestBody(request), 4096)); }
+  private async callMessages(system: string, userPayload: unknown, maxTokens: number): Promise<string> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const controller = new AbortController();
@@ -28,7 +42,7 @@ export class AnthropicAiProvider implements AiProvider {
           method: "POST",
           headers: { "content-type": "application/json", "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
           signal: controller.signal,
-          body: JSON.stringify({ model: this.model, max_tokens: 1024, system: AI_SYSTEM_PROMPT, messages: [{ role: "user", content: JSON.stringify(aiRequestBody(request)) }] }),
+          body: JSON.stringify({ model: this.model, max_tokens: maxTokens, system, messages: [{ role: "user", content: JSON.stringify(userPayload) }] }),
         });
         if (!response.ok) {
           const excerpt = (await response.text().catch(() => "")).slice(0, 200);
@@ -39,7 +53,7 @@ export class AnthropicAiProvider implements AiProvider {
         const body = await response.json() as { content?: Array<{ type?: string; text?: string }> };
         const text = body.content?.find((block) => block.type === "text")?.text ?? body.content?.[0]?.text;
         if (!text) throw new AiProviderError("Anthropic provider returned an empty response");
-        return parseAiResult(text);
+        return text;
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") { lastError = new AiProviderError(`Anthropic provider request timed out after ${this.timeoutMs}ms`); if (attempt < this.maxRetries) { continue; } throw lastError; }
         if (error instanceof AiProviderError) throw error;

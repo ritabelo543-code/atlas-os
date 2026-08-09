@@ -1,11 +1,12 @@
 import type { ContentAsset, ContentFormat, ContentPlan, ContentVariant, CreateContentPlanInput, GenerateContentInput, MarketOpportunity } from "@atlas/types";
-import type { CollectionStore, Guardian } from "./index.js";
+import type { AiProvider, CollectionStore, Guardian } from "./index.js";
 import { AgentRuntime, PermissionManager } from "./v03.js";
 
 export type ContentStores = { plans: CollectionStore<ContentPlan>; assets: CollectionStore<ContentAsset> };
+const AFFILIATE_DISCLOSURE = "Transparência: este conteúdo pode conter uma recomendação de afiliado; condições e resultados variam.";
 
 export class ContentStudio {
-  constructor(private readonly stores: ContentStores, private readonly opportunities: CollectionStore<MarketOpportunity>, private readonly guardian: Guardian, private readonly runtime: AgentRuntime, private readonly permissions: PermissionManager) {
+  constructor(private readonly stores: ContentStores, private readonly opportunities: CollectionStore<MarketOpportunity>, private readonly guardian: Guardian, private readonly runtime: AgentRuntime, private readonly permissions: PermissionManager, private readonly aiProvider?: AiProvider) {
     for (const [id, name, role] of [
       ["content-strategist", "Content Strategy Agent", "Planeja conteúdo ligado a oportunidades comerciais"],
       ["copywriter", "Copywriting Agent", "Produz textos, títulos e chamadas para ação"],
@@ -37,9 +38,19 @@ export class ContentStudio {
     const opportunity = await this.findOpportunity(plan.opportunityId, ownerId);
     if (!opportunity) throw new Error("Opportunity not found");
     const asset = await this.runtime.run("copywriter", plan.id, async () => {
-      const variants = buildVariants(opportunity, plan);
-      const primary = variants[0]!;
-      return { result: { id: crypto.randomUUID(), ownerId, planId: plan.id, opportunityId: opportunity.id, channel: input.channel, format: input.format, title: primary.title, body: buildBody(input.format, opportunity, plan, primary, input.instructions), cta: primary.cta, keywords: plan.keywords, variants, designBrief: buildDesignBrief(input.format, opportunity, plan), status: "in_review", generatedBy: ["content-strategist", "copywriter", "seo"], generationMode: "deterministic", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } satisfies ContentAsset, memoryUsed: 0, provider: "local-content-rules" };
+      const now = new Date().toISOString();
+      let result: ContentAsset; let provider: string;
+      if (this.aiProvider?.mode === "live" && this.aiProvider.generateContent) {
+        const ai = await this.aiProvider.generateContent({ opportunity, plan, channel: input.channel, format: input.format, instructions: input.instructions });
+        result = { id: crypto.randomUUID(), ownerId, planId: plan.id, opportunityId: opportunity.id, channel: input.channel, format: input.format, title: ai.title, body: `${ai.body}\n\n${AFFILIATE_DISCLOSURE}`, cta: ai.cta, keywords: plan.keywords, variants: ai.variants, designBrief: ai.designBrief, status: "in_review", generatedBy: ["content-strategist", "copywriter", "seo"], generationMode: "ai", provider: this.aiProvider.name, model: this.aiProvider.model, createdAt: now, updatedAt: now };
+        provider = this.aiProvider.name;
+      } else {
+        const variants = buildVariants(opportunity, plan);
+        const primary = variants[0]!;
+        result = { id: crypto.randomUUID(), ownerId, planId: plan.id, opportunityId: opportunity.id, channel: input.channel, format: input.format, title: primary.title, body: buildBody(input.format, opportunity, plan, primary, input.instructions), cta: primary.cta, keywords: plan.keywords, variants, designBrief: buildDesignBrief(input.format, opportunity, plan), status: "in_review", generatedBy: ["content-strategist", "copywriter", "seo"], generationMode: "deterministic", createdAt: now, updatedAt: now };
+        provider = "local-content-rules";
+      }
+      return { result, memoryUsed: 0, provider };
     }, 30_000, ownerId);
     await this.append(this.stores.assets, asset);
     await this.guardian.record("content-studio", "content.asset.generate", { ownerId, planId: plan.id, assetId: asset.id, opportunityId: opportunity.id, channel: input.channel, format: input.format, mode: asset.generationMode }, "success");
@@ -69,7 +80,7 @@ function buildVariants(opportunity: MarketOpportunity, plan: ContentPlan): Conte
   ];
 }
 function buildBody(format: ContentFormat, opportunity: MarketOpportunity, plan: ContentPlan, variant: ContentVariant, instructions?: string) {
-  const disclosure = "Transparência: este conteúdo pode conter uma recomendação de afiliado; condições e resultados variam.";
+  const disclosure = AFFILIATE_DISCLOSURE;
   const core = `${variant.hook}\n\nPara ${opportunity.audience}, o ponto central é ${opportunity.painOrDesire}. Esta peça apresenta uma opção relacionada a ${opportunity.niche}, com foco em decisão informada, benefícios verificáveis e limitações.\n\n${variant.cta}`;
   if (format === "video-script") return `ABERTURA: ${variant.hook}\nCONTEXTO: ${opportunity.painOrDesire}.\nDESENVOLVIMENTO: apresente o problema, critérios de escolha e a oferta sem garantir resultados.\nCTA: ${variant.cta}\n${disclosure}`;
   if (format === "landing-page") return `${variant.title}\n\n${core}\n\nO que avaliar: adequação ao seu cenário, preço atual, suporte e termos da oferta.\n\n${disclosure}`;
