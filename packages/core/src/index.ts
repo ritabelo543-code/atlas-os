@@ -1,4 +1,4 @@
-import type { AtlasStatus, AuditEntry, ContentChannel, ContentFormat, ContentPlan, ContentVariant, Decision, KnowledgeItem, MarketEvidence, MarketOpportunity, MarketSignal, MemoryItem, Mission } from "@atlas/types";
+import type { AtlasStatus, AuditEntry, ContentChannel, ContentFormat, ContentPlan, ContentVariant, Decision, KnowledgeItem, MarketEvidence, MarketOpportunity, MarketSignal, MemoryItem, Mission, PerformanceRecord } from "@atlas/types";
 import { AiProviderError, MemoryManager } from "./v02.js";
 import { AgentRuntime, PermissionManager } from "./v03.js";
 export { AgentRegistry, AiProviderError, AnthropicAiProvider, MemoryManager, PluginRegistry, resolveAiProvider } from "./v02.js";
@@ -25,7 +25,9 @@ export type ContentAiResult = { title: string; body: string; cta: string; varian
 export type MarketAiRequest = { market: string; niche: string; audience: string; painOrDesire: string; evidence: MarketEvidence[] };
 export type MarketAiSignal = { kind: MarketSignal["kind"]; direction: MarketSignal["direction"] };
 export type MarketAiResult = { signals: MarketAiSignal[]; rankingRationale: string };
-export interface AiProvider { readonly name: string; readonly model: string; readonly mode: "live" | "mock"; generate(request: AiRequest): Promise<AiResult>; generateContent?(request: ContentAiRequest): Promise<ContentAiResult>; analyzeMarket?(request: MarketAiRequest): Promise<MarketAiResult> }
+export type LearningAiRequest = { winner: PerformanceRecord; recordCount: number; recommendation: string };
+export type LearningAiResult = { summary: string };
+export interface AiProvider { readonly name: string; readonly model: string; readonly mode: "live" | "mock"; generate(request: AiRequest): Promise<AiResult>; generateContent?(request: ContentAiRequest): Promise<ContentAiResult>; analyzeMarket?(request: MarketAiRequest): Promise<MarketAiResult>; summarizeInsight?(request: LearningAiRequest): Promise<LearningAiResult> }
 export class MockAiProvider implements AiProvider {
   readonly name = "atlas-dev"; readonly model = "deterministic-v1"; readonly mode = "mock" as const;
   async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const evidence = knowledge.length || memory.length ? `Foram encontrados ${knowledge.length} registro(s) de conhecimento e ${memory.length} memória(s) relevante(s).` : "Não há conhecimento histórico diretamente relacionado."; const contextCount = knowledge.length + memory.length; return { recommendation: `Validar a hipótese de “${mission.objective}” com um experimento pequeno e mensurável.`, rationale: `${evidence} O caminho recomendado reduz risco antes de ampliar investimento.`, confidence: contextCount ? Math.min(.85, .55 + contextCount * .08) : .42, nextSteps: ["Definir uma métrica de sucesso", "Executar um teste de baixo custo", "Registrar os resultados no Atlas"] }; }

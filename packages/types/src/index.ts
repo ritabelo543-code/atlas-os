@@ -102,7 +102,7 @@ export type CreateDistributionInput = { assetId: string; channel: ContentChannel
 
 export type CampaignMetrics = { impressions: number; clicks: number; conversions: number; cost: number; revenue: number };
 export type PerformanceRecord = { id: string; ownerId: string; campaignId: string; assetId: string; opportunityId: string; metrics: CampaignMetrics; ctr: number; conversionRate: number; cac: number | null; roi: number | null; profit: number; dataKind: EvidenceValueKind; source: string; observedAt: string; createdAt: string };
-export type LearningInsight = { id: string; ownerId: string; opportunityId: string; recordIds: string[]; winnerRecordId?: string; summary: string; recommendation: string; confidence: number; dataKind: EvidenceValueKind; createdAt: string };
+export type LearningInsight = { id: string; ownerId: string; opportunityId: string; recordIds: string[]; winnerRecordId?: string; summary: string; recommendation: string; confidence: number; dataKind: EvidenceValueKind; aiProvider?: string; aiModel?: string; createdAt: string };
 export type CreatePerformanceInput = { campaignId: string; metrics: CampaignMetrics; dataKind: EvidenceValueKind; source: string; observedAt: string };
 
 export type ScalePolicy = { id: string; ownerId: string; name: string; maxTotalBudget: number; maxDailyBudget: number; maxIncreasePercent: number; minRoiPercent: number; minConversions: number; maxCac: number; requireConfirmedData: boolean; requireHumanApproval: true; liveExecutionEnabled: false; createdAt: string; updatedAt: string };

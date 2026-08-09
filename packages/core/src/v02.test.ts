@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AiRequest, ContentAiRequest, MarketAiRequest } from "./index.js";
+import type { AiRequest, ContentAiRequest, LearningAiRequest, MarketAiRequest } from "./index.js";
 import { AiProviderError, AnthropicAiProvider } from "./v02.js";
 
 const request: AiRequest = {
@@ -22,6 +22,12 @@ const marketRequest: MarketAiRequest = {
     { id: "e1", source: "fixture", observedAt: "", excerpt: "Interesse crescente em automação", valueKind: "simulated", confidence: .8 },
     { id: "e2", source: "fixture", observedAt: "", excerpt: "Reclamações isoladas sobre suporte", valueKind: "simulated", confidence: .6 },
   ],
+};
+
+const learningRequest: LearningAiRequest = {
+  winner: { id: "r1", ownerId: "u1", campaignId: "c1", assetId: "a1", opportunityId: "o1", metrics: { impressions: 1000, clicks: 100, conversions: 10, cost: 50, revenue: 150 }, ctr: 10, conversionRate: 10, cac: 5, roi: 200, profit: 100, dataKind: "confirmed", source: "fixture", observedAt: "", createdAt: "" },
+  recordCount: 1,
+  recommendation: "Repetir o criativo vencedor em teste controlado, mantendo orçamento limitado até confirmar consistência.",
 };
 
 function withFetch<T>(impl: typeof fetch, run: () => Promise<T>): Promise<T> {
@@ -137,5 +143,20 @@ test("AnthropicAiProvider analyzeMarket throws AiProviderError on an invalid kin
   await withFetch(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ signals: [{ kind: "trend", direction: "rising" }, { kind: "not-a-real-kind", direction: "rising" }], rankingRationale: "Racional" }) }] }), { status: 200 }), async () => {
     const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-test-key", "https://api.anthropic.com/v1", { maxRetries: 0 });
     await assert.rejects(() => provider.analyzeMarket(marketRequest), (error: AiProviderError) => { assert.ok(error instanceof AiProviderError); return true; });
+  });
+});
+
+test("AnthropicAiProvider summarizeInsight returns a summary grounded in the given metrics", async () => {
+  await withFetch(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ summary: "O criativo vencedor teve CTR de 10% e ROI de 200%, com lucro de 100." }) }] }), { status: 200 }), async () => {
+    const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-test-key");
+    const result = await provider.summarizeInsight(learningRequest);
+    assert.match(result.summary, /CTR/);
+  });
+});
+
+test("AnthropicAiProvider summarizeInsight throws AiProviderError when summary is missing", async () => {
+  await withFetch(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({}) }] }), { status: 200 }), async () => {
+    const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-test-key", "https://api.anthropic.com/v1", { maxRetries: 0 });
+    await assert.rejects(() => provider.summarizeInsight(learningRequest), (error: AiProviderError) => { assert.ok(error instanceof AiProviderError); return true; });
   });
 });
