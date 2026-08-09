@@ -1,6 +1,9 @@
 import type { AiProvider, AiRequest, AiResult, CollectionStore } from "./index.js";
 import type { AtlasAgent, MemoryItem, PluginManifest } from "@atlas/types";
 
+export class AiProviderError extends Error {
+  constructor(message: string, readonly providerStatus?: number) { super(message); this.name = "AiProviderError"; }
+}
 const AI_SYSTEM_PROMPT = "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array). Reply with only the JSON object, no prose, no markdown fences.";
 function parseAiResult(raw: string): AiResult {
   const parsed = JSON.parse(raw) as AiResult;
@@ -29,22 +32,22 @@ export class AnthropicAiProvider implements AiProvider {
         });
         if (!response.ok) {
           const excerpt = (await response.text().catch(() => "")).slice(0, 200);
-          const error = new Error(`Anthropic provider request failed (${response.status}): ${excerpt}`);
+          const error = new AiProviderError(`Anthropic provider request failed (${response.status}): ${excerpt}`, response.status);
           if (response.status === 429 || response.status >= 500) { lastError = error; if (attempt < this.maxRetries) { await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt)); continue; } }
           throw error;
         }
         const body = await response.json() as { content?: Array<{ type?: string; text?: string }> };
         const text = body.content?.find((block) => block.type === "text")?.text ?? body.content?.[0]?.text;
-        if (!text) throw new Error("Anthropic provider returned an empty response");
+        if (!text) throw new AiProviderError("Anthropic provider returned an empty response");
         return parseAiResult(text);
       } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") { lastError = new Error(`Anthropic provider request timed out after ${this.timeoutMs}ms`); if (attempt < this.maxRetries) { continue; } throw lastError; }
-        if ((error as { message?: string })?.message?.startsWith("Anthropic provider request failed")) throw error;
+        if (error instanceof Error && error.name === "AbortError") { lastError = new AiProviderError(`Anthropic provider request timed out after ${this.timeoutMs}ms`); if (attempt < this.maxRetries) { continue; } throw lastError; }
+        if (error instanceof AiProviderError) throw error;
         lastError = error; if (attempt < this.maxRetries) { await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt)); continue; }
         throw error;
       } finally { clearTimeout(timer); }
     }
-    throw lastError instanceof Error ? lastError : new Error("Anthropic provider request failed");
+    throw lastError instanceof Error ? lastError : new AiProviderError("Anthropic provider request failed");
   }
 }
 

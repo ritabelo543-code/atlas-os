@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { AiRequest } from "./index.js";
-import { AnthropicAiProvider } from "./v02.js";
+import { AiProviderError, AnthropicAiProvider } from "./v02.js";
 
 const request: AiRequest = {
   mission: { id: "m1", title: "Mercado B2B", objective: "Analisar uma oportunidade de mercado B2B", context: "Novo produto", status: "running", createdAt: "", updatedAt: "", decisionId: null },
@@ -44,7 +44,9 @@ test("AnthropicAiProvider fails fast on 401 without retrying", async () => {
   let attempts = 0;
   await withFetch(async () => { attempts++; return new Response("unauthorized", { status: 401 }); }, async () => {
     const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-bad-key");
-    await assert.rejects(() => provider.generate(request), (error: Error) => {
+    await assert.rejects(() => provider.generate(request), (error: AiProviderError) => {
+      assert.ok(error instanceof AiProviderError);
+      assert.equal(error.providerStatus, 401);
       assert.match(error.message, /401/);
       assert.doesNotMatch(error.message, /sk-bad-key/);
       return true;
