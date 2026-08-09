@@ -4,7 +4,7 @@
 
 Atlas MVP finalizado ponta a ponta. API e Web iniciam localmente, o usuário cria uma missão na Mission Control, executa a análise, recebe uma decisão estruturada e consulta o histórico persistido. A API anterior de projetos e tarefas foi preservada.
 
-Desde a v1.1, o Executive Agent (missões) pode usar IA real (Claude, via `AnthropicAiProvider`) quando `AI_PROVIDER=claude` e há credencial/crédito configurados; sem isso, o fallback para `MockAiProvider` é automático. Os demais agentes (Market Research, Content Studio, Distribution, Learning, Scale, Company Orchestrator) ainda operam com regras determinísticas locais — ver v1.1 no roadmap para o que falta para estendê-los.
+Desde a v1.1, o Executive Agent (missões) pode usar IA real (Claude, via `AnthropicAiProvider`) quando `AI_PROVIDER=claude` e há credencial/crédito configurados; sem isso, o fallback para `MockAiProvider` é automático. A v1.2 estendeu isso a Content Studio, Market Intelligence e Learning Engine (ver detalhes no roadmap). Distribution Center, Scale Engine e Company Orchestrator permanecem deterministicamente por decisão explícita — não há tarefa de linguagem natural genuína neles, e no caso do Scale Engine a decisão alimenta diretamente ação financeira, que o handoff exige manter sob controle determinístico e aprovação humana.
 
 ## Direção oficial do produto
 
@@ -115,6 +115,27 @@ A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, p
 - Build integral do monorepo aprovado.
 - Validação real (fora da suíte automatizada, com credencial local): `/atlas/status` reportou `provider: anthropic`, `model: claude-sonnet-5`, `mode: live`; missão de teste executada com sucesso retornou `provider: anthropic` na decisão, com recomendação gerada pelo modelo real.
 - Cenário de falha real também validado: antes da compra de créditos, a chamada real retornou `502 AI_PROVIDER_ERROR` com mensagem segura (sem vazar o corpo do erro da Anthropic nem a chave).
+
+## Sprint v1.2 — IA REAL ESTENDIDA (CONTENT, MARKET, LEARNING) — CONCLUÍDA
+
+- **Content Studio** ([PR #11](https://github.com/ritabelo543-code/atlas-os/pull/11)): `AiProvider.generateContent?()` opcional; `ContentStudio` usa o provider real quando `mode === "live"`, com fallback para os templates determinísticos existentes. Disclosure de afiliado sempre adicionada em código. `ContentAsset` ganhou `provider?`/`model?`.
+- **Market Intelligence** ([PR #12](https://github.com/ritabelo543-code/atlas-os/pull/12)): `AiProvider.analyzeMarket?()` opcional; substitui a classificação de sinais por regex por classificação real via IA (`kind`/`direction` por evidência) e gera `rankingRationale` real. `scoreOpportunity()` (os números) permanece 100% intocado — validado por teste dedicado. `MarketResearch` ganhou `aiProvider?`/`aiModel?`.
+- **Learning Engine** ([PR #13](https://github.com/ritabelo543-code/atlas-os/pull/13)): `AiProvider.summarizeInsight?()` opcional; `LearningInsight.summary` passa a ser escrito pela IA a partir das métricas reais (CTR/conversão/ROI/lucro), sem inventar números. A recomendação (repetir/revisar) — que alimenta a decisão de escala — permanece determinística. `LearningInsight` ganhou `aiProvider?`/`aiModel?`.
+- Todas as três rotas (`/content/assets`, `/market/research`, `/learning/opportunities/:id/analyze`) agora repassam `AiProviderError` para o handler global (`502 AI_PROVIDER_ERROR`) em vez de mascarar como `400` genérico — mesma correção replicada 3 vezes, mesmo padrão da v1.1.
+- `AnthropicAiProvider` refatorado internamente: `generate`/`generateContent`/`analyzeMarket`/`summarizeInsight` compartilham um único `callMessages()` privado (timeout, retry, parsing de erro), sem duplicar lógica de rede a cada nova capacidade.
+- Bug real encontrado e corrigido durante validação ao vivo: `JSON.parse` de resposta truncada (limite de tokens insuficiente) vazava como erro cru `400` em vez de `502 AI_PROVIDER_ERROR`; corrigido com `parseJson()` centralizado e orçamento de tokens maior para conteúdo (4096 vs. 1024 de missões).
+- **Decisão explícita de manter determinísticos**: Scale Engine (decisão financeira `scale/hold/stop` e orçamento — controle determinístico exigido pelo handoff), Distribution Center (mecânica de UTM/URL, sem texto livre a interpretar) e Company Orchestrator (contagens e tabela de ações fixas, sem evidência textual de entrada). Ver ROADMAP.md v1.2 para o racional completo.
+
+### Validação v1.2
+
+- Core: 21 testes aprovados (9 novos: `generateContent`, `analyzeMarket`, `summarizeInsight`, cada um com casos de sucesso e de resposta inválida/incompleta).
+- API: 26 testes aprovados (6 novos: um par sucesso/falha-502 para cada um dos três agentes estendidos).
+- Build integral do monorepo aprovado em cada incremento.
+- Validação real (credencial local, créditos ativos):
+  - Content Studio gerou um roteiro de vídeo completo (`generationMode: "ai"`, 3 variantes, briefing visual, disclosure presente).
+  - Market Intelligence classificou corretamente evidências sem palavras-chave óbvias: migração para concorrente ("agendas de papel") como `competition`/`rising`, reclamação isolada como `noise`/`unknown`, padrão sazonal de janeiro como `seasonality`/`stable` — distinções que a regex anterior não conseguia fazer.
+  - Learning Engine escreveu um resumo referenciando exatamente CTR 10%, ROI 200%, lucro 100 e CAC 5, sem inventar dados, mantendo a recomendação determinística.
+- PRs: [#11](https://github.com/ritabelo543-code/atlas-os/pull/11), [#12](https://github.com/ritabelo543-code/atlas-os/pull/12), [#13](https://github.com/ritabelo543-code/atlas-os/pull/13) — todos em draft, encadeados (#10 → #11 → #12 → #13), aguardando revisão/merge em sequência.
 
 ## Sprint v1.0 — CONTROL PLANE CONCLUÍDO
 

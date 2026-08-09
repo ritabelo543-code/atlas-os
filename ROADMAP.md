@@ -72,4 +72,19 @@ O Atlas COO coordena e avalia o ciclo completo, identifica gargalos e recomenda 
 - Validado com chamada real: `provider: anthropic`, `model: claude-sonnet-5`, `mode: live`, recomendação gerada pelo modelo real em uma missão de teste local.
 - `MockAiProvider` permanece o padrão sem credencial; nenhum outro fluxo do Atlas foi alterado.
 
+## v1.2 — IA Real Estendida aos Agentes Comerciais — CONCLUÍDA
+
+Estendeu o `AnthropicAiProvider` (v1.1) para os agentes cujo trabalho é genuinamente interpretativo/textual, mantendo todo número e decisão de risco/orçamento 100% determinístico:
+
+- **Content Studio** ([PR #11](https://github.com/ritabelo543-code/atlas-os/pull/11)): geração de título, corpo, CTA, variantes e briefing visual via IA real quando disponível; disclosure de afiliado sempre adicionada em código, nunca confiada ao modelo.
+- **Market Intelligence** ([PR #12](https://github.com/ritabelo543-code/atlas-os/pull/12)): classificação de sinais (`kind`/`direction`) a partir do texto livre das evidências e redação do `rankingRationale` via IA real, substituindo a regex por palavras-chave. `scoreOpportunity()` (os números) permanece intocado.
+- **Learning Engine** ([PR #13](https://github.com/ritabelo543-code/atlas-os/pull/13)): redação do `summary` do insight a partir das métricas reais (CTR/conversão/ROI/lucro) via IA real. A recomendação (repetir/revisar), que alimenta a decisão de escala, permanece 100% determinística.
+
+Todos os três seguem o mesmo padrão: capacidade opcional na interface `AiProvider`, fallback determinístico idêntico ao comportamento anterior quando não há provider `live`, erros do provider mapeados para `502 AI_PROVIDER_ERROR` (nunca `400`/`500` genérico), e validação real com credencial local antes de cada PR.
+
+**Decisão explícita de manter determinísticos** (não é lacuna, é escolha deliberada):
+- **Scale Engine** — a decisão `scale`/`hold`/`stop` e o orçamento proposto alimentam diretamente uma ação financeira (ainda que simulada). Deixar isso sob julgamento de um LLM contradiz o princípio do handoff de execução financeira controlada e aprovação humana obrigatória; o único texto livre (`rationale`, 2 strings fixas) não justifica esse risco.
+- **Distribution Center** — não há texto livre para interpretar; é mecânica de UTM/URL e simulação `dry_run` sob portões de segurança. Não há tarefa de linguagem natural para a IA fazer.
+- **Company Orchestrator** — avalia contagens determinísticas por estágio e recomenda a próxima ação de uma tabela fixa; não há evidência textual de entrada para sintetizar.
+
 Próximo: Content Studio, Market Research e demais agentes ainda usam regras determinísticas locais; IA real cobre hoje apenas o Executive Agent (missões). Estender IA real aos demais agentes é a próxima etapa antes de qualquer autonomia maior.
