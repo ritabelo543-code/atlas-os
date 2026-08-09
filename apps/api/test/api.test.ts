@@ -24,7 +24,7 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const opportunityStore = memoryStore<MarketOpportunity>(); const runtime = new AgentRuntime(); const permissions = new PermissionManager(); const guardian = new Guardian(memoryStore<AuditEntry>());
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions, provider);
   const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions, provider);
-  const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
+  const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions, provider); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
   const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, logger: false });
   apps.push(app);
   return app;
@@ -174,6 +174,36 @@ test("distribution requires approved content, tracks links, dry-runs and isolate
   assert.equal((await app.inject({ method: "GET", url: "/learning/performance", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: "/learning/insights", headers: outsider })).json().length, 0);
   assert.equal((await app.inject({ method: "GET", url: "/scale/policies", headers: outsider })).json().length, 0); assert.equal((await app.inject({ method: "GET", url: "/scale/proposals", headers: outsider })).json().length, 0);
   assert.equal((await app.inject({ method: "GET", url: "/company/cycles", headers: outsider })).json().length, 0);
+});
+
+async function runToPerformance(app: Awaited<ReturnType<typeof buildApp>>, owner: { authorization: string }) {
+  const research = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload: { query: "vendas", market: "Software", niche: "vendas digitais", audience: "afiliados iniciantes", painOrDesire: "criar conteúdo que converte", channels: ["youtube"], evidence: [{ source: "fixture:v0.7", observedAt: "2026-08-08T00:00:00.000Z", excerpt: "Demanda simulada crescente", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta Demo", provider: "fixture", notes: "Demonstração" }], metrics: { demand: 80, commercialIntent: 80, competition: 40, monetization: 75, margin: 70, effort: 35, risk: 25, evidenceQuality: 80, confidence: 75, scalability: 80 }, dataKind: "simulated" } }); const opportunityId = research.json().opportunities[0].id;
+  const plan = (await app.inject({ method: "POST", url: "/content/plans", headers: owner, payload: { opportunityId, objective: "Gerar interesse qualificado", funnelStage: "conversion", channels: ["youtube"], keywords: ["vendas"], tone: "claro" } })).json<ContentPlan>();
+  const asset = (await app.inject({ method: "POST", url: "/content/assets", headers: owner, payload: { planId: plan.id, channel: "youtube", format: "video-script" } })).json<ContentAsset>();
+  await app.inject({ method: "PATCH", url: `/content/assets/${asset.id}/review`, headers: owner, payload: { status: "approved" } });
+  const campaign = (await app.inject({ method: "POST", url: "/distribution/campaigns", headers: owner, payload: { assetId: asset.id, channel: "youtube", destination: "Canal demo", scheduledAt: "2026-08-09T12:00:00.000Z", targetUrl: "https://example.com/offer", campaignName: "Teste IA" } })).json<DistributionCampaign>();
+  await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/approve`, headers: owner }); await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/schedule`, headers: owner }); await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/execute`, headers: owner });
+  await app.inject({ method: "POST", url: "/learning/performance", headers: owner, payload: { campaignId: campaign.id, metrics: { impressions: 1000, clicks: 100, conversions: 10, cost: 50, revenue: 150 }, dataKind: "simulated", source: "fixture:v0.8", observedAt: "2026-08-09T13:00:00.000Z" } });
+  return opportunityId;
+}
+
+test("learning uses a live AI provider to write the insight summary, keeping the recommendation deterministic", async () => {
+  const aiProvider: AiProvider = { name: "anthropic", model: "claude-sonnet-5", mode: "live", generate: async () => { throw new Error("not used in this test"); }, summarizeInsight: async () => ({ summary: "Resumo gerado pela IA a partir das métricas reais." }) };
+  const app = await testApp([], [], aiProvider); const owner = await authHeaders(app, "learning-ai-owner@example.com");
+  const opportunityId = await runToPerformance(app, owner);
+  const insight = await app.inject({ method: "POST", url: `/learning/opportunities/${opportunityId}/analyze`, headers: owner });
+  assert.equal(insight.statusCode, 200); const body = insight.json();
+  assert.equal(body.summary, "Resumo gerado pela IA a partir das métricas reais.");
+  assert.equal(body.aiProvider, "anthropic"); assert.equal(body.aiModel, "claude-sonnet-5");
+  assert.match(body.recommendation, /teste controlado/);
+});
+
+test("learning surfaces AI provider failures as a structured 502, not a generic 400", async () => {
+  const aiProvider: AiProvider = { name: "anthropic", model: "claude-sonnet-5", mode: "live", generate: async () => { throw new Error("not used in this test"); }, summarizeInsight: async () => { throw new AiProviderError("Anthropic provider request failed (400): insufficient credits", 400); } };
+  const app = await testApp([], [], aiProvider); const owner = await authHeaders(app, "learning-ai-fail-owner@example.com");
+  const opportunityId = await runToPerformance(app, owner);
+  const insight = await app.inject({ method: "POST", url: `/learning/opportunities/${opportunityId}/analyze`, headers: owner });
+  assert.equal(insight.statusCode, 502); const body = insight.json(); assert.equal(body.error, "AI_PROVIDER_ERROR"); assert.doesNotMatch(JSON.stringify(body), /insufficient credits/);
 });
 
 test("authentication isolates missions between users", async () => {

@@ -1,4 +1,4 @@
-import type { AiProvider, AiRequest, AiResult, CollectionStore, ContentAiRequest, ContentAiResult, MarketAiRequest, MarketAiResult } from "./index.js";
+import type { AiProvider, AiRequest, AiResult, CollectionStore, ContentAiRequest, ContentAiResult, LearningAiRequest, LearningAiResult, MarketAiRequest, MarketAiResult } from "./index.js";
 import type { AtlasAgent, MemoryItem, PluginManifest } from "@atlas/types";
 
 export class AiProviderError extends Error {
@@ -35,6 +35,14 @@ function parseMarketResult(raw: string, expectedCount: number): MarketAiResult {
 }
 function marketRequestBody(request: MarketAiRequest): unknown { return { market: request.market, niche: request.niche, audience: request.audience, painOrDesire: request.painOrDesire, evidence: request.evidence.map((item) => ({ excerpt: item.excerpt, valueKind: item.valueKind, confidence: item.confidence })) }; }
 
+const LEARNING_SYSTEM_PROMPT = "Return JSON with summary (string): a short natural-language performance summary. Reference only the exact CTR, conversion rate, ROI and profit values given -- never invent or alter numbers, and do not restate the recommendation verbatim. Reply with only the JSON object, no prose, no markdown fences.";
+function parseLearningResult(raw: string): LearningAiResult {
+  const parsed = parseJson(raw) as LearningAiResult;
+  if (!parsed.summary) throw new AiProviderError("AI learning provider returned an invalid response");
+  return { summary: parsed.summary };
+}
+function learningRequestBody(request: LearningAiRequest): unknown { return { winner: { ctr: request.winner.ctr, conversionRate: request.winner.conversionRate, roi: request.winner.roi, profit: request.winner.profit, cac: request.winner.cac, dataKind: request.winner.dataKind }, recordCount: request.recordCount, recommendation: request.recommendation }; }
+
 export class AnthropicAiProvider implements AiProvider {
   readonly name = "anthropic"; readonly mode = "live" as const;
   private readonly timeoutMs: number; private readonly maxRetries: number;
@@ -44,6 +52,7 @@ export class AnthropicAiProvider implements AiProvider {
   async generate(request: AiRequest): Promise<AiResult> { return parseAiResult(await this.callMessages(AI_SYSTEM_PROMPT, aiRequestBody(request), 1024)); }
   async generateContent(request: ContentAiRequest): Promise<ContentAiResult> { return parseContentResult(await this.callMessages(CONTENT_SYSTEM_PROMPT, contentRequestBody(request), 4096)); }
   async analyzeMarket(request: MarketAiRequest): Promise<MarketAiResult> { return parseMarketResult(await this.callMessages(MARKET_SYSTEM_PROMPT, marketRequestBody(request), 2048), request.evidence.length); }
+  async summarizeInsight(request: LearningAiRequest): Promise<LearningAiResult> { return parseLearningResult(await this.callMessages(LEARNING_SYSTEM_PROMPT, learningRequestBody(request), 512)); }
   private async callMessages(system: string, userPayload: unknown, maxTokens: number): Promise<string> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
