@@ -1,4 +1,4 @@
-import type { AiProvider, AiRequest, AiResult, CollectionStore, ContentAiRequest, ContentAiResult } from "./index.js";
+import type { AiProvider, AiRequest, AiResult, CollectionStore, ContentAiRequest, ContentAiResult, MarketAiRequest, MarketAiResult } from "./index.js";
 import type { AtlasAgent, MemoryItem, PluginManifest } from "@atlas/types";
 
 export class AiProviderError extends Error {
@@ -24,6 +24,17 @@ function parseContentResult(raw: string): ContentAiResult {
 }
 function contentRequestBody(request: ContentAiRequest): unknown { return { opportunity: { market: request.opportunity.market, niche: request.opportunity.niche, audience: request.opportunity.audience, painOrDesire: request.opportunity.painOrDesire }, plan: { objective: request.plan.objective, funnelStage: request.plan.funnelStage, tone: request.plan.tone, keywords: request.plan.keywords }, channel: request.channel, format: request.format, instructions: request.instructions }; }
 
+const MARKET_SIGNAL_KINDS = ["trend", "seasonality", "noise", "demand", "competition"] as const;
+const MARKET_SIGNAL_DIRECTIONS = ["rising", "falling", "stable", "unknown"] as const;
+const MARKET_SYSTEM_PROMPT = `Return JSON with signals (an array with exactly one classification per evidence item, in the same order as given, each an object with kind and direction) and rankingRationale (string). kind must be exactly one of: ${MARKET_SIGNAL_KINDS.join(", ")}. direction must be exactly one of: ${MARKET_SIGNAL_DIRECTIONS.join(", ")}. Ground rankingRationale only in the given evidence and score; do not invent new numbers or unverifiable claims. Reply with only the JSON object, no prose, no markdown fences.`;
+function parseMarketResult(raw: string, expectedCount: number): MarketAiResult {
+  const parsed = parseJson(raw) as MarketAiResult;
+  const validSignals = Array.isArray(parsed.signals) && parsed.signals.length === expectedCount && parsed.signals.every((signal) => signal && (MARKET_SIGNAL_KINDS as readonly string[]).includes(signal.kind) && (MARKET_SIGNAL_DIRECTIONS as readonly string[]).includes(signal.direction));
+  if (!validSignals || !parsed.rankingRationale) throw new AiProviderError("AI market provider returned an invalid response");
+  return { signals: parsed.signals, rankingRationale: parsed.rankingRationale };
+}
+function marketRequestBody(request: MarketAiRequest): unknown { return { market: request.market, niche: request.niche, audience: request.audience, painOrDesire: request.painOrDesire, evidence: request.evidence.map((item) => ({ excerpt: item.excerpt, valueKind: item.valueKind, confidence: item.confidence })) }; }
+
 export class AnthropicAiProvider implements AiProvider {
   readonly name = "anthropic"; readonly mode = "live" as const;
   private readonly timeoutMs: number; private readonly maxRetries: number;
@@ -32,6 +43,7 @@ export class AnthropicAiProvider implements AiProvider {
   }
   async generate(request: AiRequest): Promise<AiResult> { return parseAiResult(await this.callMessages(AI_SYSTEM_PROMPT, aiRequestBody(request), 1024)); }
   async generateContent(request: ContentAiRequest): Promise<ContentAiResult> { return parseContentResult(await this.callMessages(CONTENT_SYSTEM_PROMPT, contentRequestBody(request), 4096)); }
+  async analyzeMarket(request: MarketAiRequest): Promise<MarketAiResult> { return parseMarketResult(await this.callMessages(MARKET_SYSTEM_PROMPT, marketRequestBody(request), 2048), request.evidence.length); }
   private async callMessages(system: string, userPayload: unknown, maxTokens: number): Promise<string> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { AiRequest, ContentAiRequest } from "./index.js";
+import type { AiRequest, ContentAiRequest, MarketAiRequest } from "./index.js";
 import { AiProviderError, AnthropicAiProvider } from "./v02.js";
 
 const request: AiRequest = {
@@ -14,6 +14,14 @@ const contentRequest: ContentAiRequest = {
   plan: { id: "p1", ownerId: "u1", opportunityId: "o1", audience: "profissionais autônomos", painOrDesire: "economizar tempo", objective: "Apresentar a oferta", funnelStage: "conversion", channels: ["youtube"], keywords: ["produtividade"], tone: "claro", status: "active", createdAt: "", updatedAt: "" },
   channel: "youtube",
   format: "video-script",
+};
+
+const marketRequest: MarketAiRequest = {
+  market: "Software", niche: "produtividade", audience: "profissionais autônomos", painOrDesire: "economizar tempo",
+  evidence: [
+    { id: "e1", source: "fixture", observedAt: "", excerpt: "Interesse crescente em automação", valueKind: "simulated", confidence: .8 },
+    { id: "e2", source: "fixture", observedAt: "", excerpt: "Reclamações isoladas sobre suporte", valueKind: "simulated", confidence: .6 },
+  ],
 };
 
 function withFetch<T>(impl: typeof fetch, run: () => Promise<T>): Promise<T> {
@@ -104,5 +112,30 @@ test("AnthropicAiProvider generateContent throws AiProviderError on malformed va
   await withFetch(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ title: "Título", body: "Corpo", cta: "CTA", variants: [{ title: "V1", hook: "H1", cta: "C1" }] }) }] }), { status: 200 }), async () => {
     const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-test-key", "https://api.anthropic.com/v1", { maxRetries: 0 });
     await assert.rejects(() => provider.generateContent(contentRequest), (error: AiProviderError) => { assert.ok(error instanceof AiProviderError); return true; });
+  });
+});
+
+test("AnthropicAiProvider analyzeMarket classifies each evidence item in order", async () => {
+  await withFetch(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ signals: [{ kind: "trend", direction: "rising" }, { kind: "noise", direction: "unknown" }], rankingRationale: "Racional gerado pela IA" }) }] }), { status: 200 }), async () => {
+    const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-test-key");
+    const result = await provider.analyzeMarket(marketRequest);
+    assert.equal(result.signals.length, 2);
+    assert.equal(result.signals[0]?.kind, "trend"); assert.equal(result.signals[0]?.direction, "rising");
+    assert.equal(result.signals[1]?.kind, "noise"); assert.equal(result.signals[1]?.direction, "unknown");
+    assert.equal(result.rankingRationale, "Racional gerado pela IA");
+  });
+});
+
+test("AnthropicAiProvider analyzeMarket throws AiProviderError when signal count does not match evidence", async () => {
+  await withFetch(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ signals: [{ kind: "trend", direction: "rising" }], rankingRationale: "Faltando um sinal" }) }] }), { status: 200 }), async () => {
+    const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-test-key", "https://api.anthropic.com/v1", { maxRetries: 0 });
+    await assert.rejects(() => provider.analyzeMarket(marketRequest), (error: AiProviderError) => { assert.ok(error instanceof AiProviderError); return true; });
+  });
+});
+
+test("AnthropicAiProvider analyzeMarket throws AiProviderError on an invalid kind/direction value", async () => {
+  await withFetch(async () => new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ signals: [{ kind: "trend", direction: "rising" }, { kind: "not-a-real-kind", direction: "rising" }], rankingRationale: "Racional" }) }] }), { status: 200 }), async () => {
+    const provider = new AnthropicAiProvider("claude-sonnet-5", "sk-test-key", "https://api.anthropic.com/v1", { maxRetries: 0 });
+    await assert.rejects(() => provider.analyzeMarket(marketRequest), (error: AiProviderError) => { assert.ok(error instanceof AiProviderError); return true; });
   });
 });
