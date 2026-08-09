@@ -1,7 +1,7 @@
 import type { AtlasStatus, AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
-import { MemoryManager } from "./v02.js";
+import { AiProviderError, MemoryManager } from "./v02.js";
 import { AgentRuntime, PermissionManager } from "./v03.js";
-export { AgentRegistry, MemoryManager, PluginRegistry, resolveAiProvider } from "./v02.js";
+export { AgentRegistry, AiProviderError, AnthropicAiProvider, MemoryManager, PluginRegistry, resolveAiProvider } from "./v02.js";
 export { AgentRuntime, GitHubPlugin, PermissionManager, PluginRuntime } from "./v03.js";
 export { MarketIntelligence, scoreOpportunity, type MarketStores } from "./market.js";
 export { ContentStudio, type ContentStores } from "./content.js";
@@ -28,7 +28,7 @@ export class MockAiProvider implements AiProvider {
 export class CompatibleAiProvider implements AiProvider {
   readonly mode = "live" as const;
   constructor(readonly name: string, readonly model: string, private readonly apiKey: string, private readonly baseUrl: string) {}
-  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array)." }, { role: "user", content: JSON.stringify({ mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }) }] }) }); if (!response.ok) throw new Error(`AI provider request failed (${response.status})`); const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as AiResult; if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new Error("AI provider returned an invalid response"); return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) }; }
+  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array)." }, { role: "user", content: JSON.stringify({ mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }) }] }) }); if (!response.ok) throw new AiProviderError(`AI provider request failed (${response.status})`, response.status); const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as AiResult; if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new AiProviderError("AI provider returned an invalid response"); return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) }; }
 }
 
 export class KnowledgeEngine {

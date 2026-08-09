@@ -63,3 +63,13 @@ Políticas, propostas, aprovação e simulação foram entregues. Execução fin
 - Operação humana por exceção, com controles de segurança e aprovação para ações críticas.
 
 O Atlas COO coordena e avalia o ciclo completo, identifica gargalos e recomenda a próxima ação. A autonomia externa permanece bloqueada até existirem conectores reais, dados confirmados e orçamento autorizado.
+
+## v1.1 — Provider de IA Real (Claude nativo) — CONCLUÍDA
+
+- `AnthropicAiProvider` nativo, usando a Messages API da Anthropic diretamente (sem gateway OpenAI-compatible).
+- Timeout, retry limitado (429/5xx) e tratamento de erro sem exposição de chave.
+- Falhas do provider de IA mapeadas para `502 AI_PROVIDER_ERROR` estruturado, em vez de `500` genérico.
+- Validado com chamada real: `provider: anthropic`, `model: claude-sonnet-5`, `mode: live`, recomendação gerada pelo modelo real em uma missão de teste local.
+- `MockAiProvider` permanece o padrão sem credencial; nenhum outro fluxo do Atlas foi alterado.
+
+Próximo: Content Studio, Market Research e demais agentes ainda usam regras determinísticas locais; IA real cobre hoje apenas o Executive Agent (missões). Estender IA real aos demais agentes é a próxima etapa antes de qualquer autonomia maior.

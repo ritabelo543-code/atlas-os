@@ -1,5 +1,5 @@
 import cors from "@fastify/cors";
-import { CompanyOrchestrator, ContentStudio, DistributionCenter, GitHubPlugin, LearningEngine, MarketIntelligence, PluginRuntime, ScaleEngine, type AtlasCore } from "@atlas/core";
+import { AiProviderError, CompanyOrchestrator, ContentStudio, DistributionCenter, GitHubPlugin, LearningEngine, MarketIntelligence, PluginRuntime, ScaleEngine, type AtlasCore } from "@atlas/core";
 import type { AffiliateOffer, CompanyCycle, ContentAsset, ContentPlan, CreateContentPlanInput, CreateDistributionInput, CreateMarketResearchInput, CreateMissionInput, CreatePerformanceInput, CreateProjectInput, CreateScalePolicyInput, CreateScaleProposalInput, CreateTaskInput, DistributionCampaign, GenerateContentInput, HealthResponse, LearningInsight, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, PerformanceRecord, Project, ScalePolicy, ScaleProposal, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { fileURLToPath } from "node:url";
@@ -71,6 +71,11 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   await app.register(cors, { origin: allowedOrigin, methods: ["GET", "POST", "PATCH", "DELETE"] });
 
   app.setErrorHandler((error: FastifyError, request, reply) => {
+    if (error instanceof AiProviderError) {
+      request.log.error({ err: error, providerStatus: (error as AiProviderError).providerStatus }, "AI provider request failed");
+      void reply.code(502).send({ error: "AI_PROVIDER_ERROR", message: "The AI provider is temporarily unavailable or misconfigured. Check credentials and billing, then try again.", statusCode: 502, requestId: request.id });
+      return;
+    }
     const statusCode = error.validation ? 400 : (error.statusCode && error.statusCode < 500 ? error.statusCode : 500);
     if (statusCode >= 500) request.log.error({ err: error }, "request failed");
     void reply.code(statusCode).send({ error: statusCode === 400 ? "VALIDATION_ERROR" : "INTERNAL_ERROR", message: statusCode === 400 ? error.message : "Unexpected server error.", statusCode, requestId: request.id });

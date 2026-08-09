@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import type { CompanyCycle, ContentAsset, ContentPlan, DistributionCampaign, LearningInsight, MarketOpportunity, PerformanceRecord, Project, ScalePolicy, ScaleProposal, Task } from "@atlas/types";
 import type { AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
-import { AgentRuntime, AtlasCore, CompanyOrchestrator, ContentStudio, DistributionCenter, Guardian, LearningEngine, MarketIntelligence, MockAiProvider, PermissionManager, ScaleEngine } from "@atlas/core";
+import { AgentRuntime, AiProviderError, AtlasCore, CompanyOrchestrator, ContentStudio, DistributionCenter, Guardian, LearningEngine, MarketIntelligence, MockAiProvider, PermissionManager, ScaleEngine, type AiProvider } from "@atlas/core";
 import { buildApp } from "../src/app.js";
 import type { JsonStore } from "../src/lib/storage.js";
 import { ProjectRepository } from "../src/repositories/ProjectRepository.js";
@@ -16,10 +16,10 @@ function memoryStore<T>(initial: T[] = []): JsonStore<T> {
   let values = structuredClone(initial);
   return { load: async () => structuredClone(values), save: async (next) => { values = structuredClone(next); } };
 }
-async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = []) {
+async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [], provider: AiProvider = new MockAiProvider()) {
   const projects = new ProjectService(new ProjectRepository(memoryStore<Project>(initialProjects)));
   const tasks = new TaskService(new TaskRepository(memoryStore<Task>(initialTasks)));
-  const atlas = new AtlasCore(new MockAiProvider(), { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
+  const atlas = new AtlasCore(provider, { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
   const auth = new AuthService(memoryStore<StoredUser>(), "test-secret");
   const opportunityStore = memoryStore<MarketOpportunity>(); const runtime = new AgentRuntime(); const permissions = new PermissionManager(); const guardian = new Guardian(memoryStore<AuditEntry>());
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions);
@@ -55,6 +55,20 @@ test("mission flow returns a structured decision and history", async () => {
   assert.equal(decision.executionPlan?.length, 3);
   assert.equal((await app.inject({ method: "GET", url: "/missions", headers })).json<Mission[]>()[0]?.status, "completed");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().ai.mode, "mock");
+});
+
+test("mission execution surfaces AI provider failures as a structured 502, not a generic 500", async () => {
+  const failingProvider: AiProvider = { name: "broken", model: "test-model", mode: "live", generate: async () => { throw new AiProviderError("Anthropic provider request failed (400): insufficient credits", 400); } };
+  const app = await testApp([], [], failingProvider);
+  const headers = await authHeaders(app);
+  const created = await app.inject({ method: "POST", url: "/missions", headers, payload: { title: "Teste de falha do provider", objective: "Validar tratamento de erro do provider de IA", context: "" } });
+  assert.equal(created.statusCode, 201);
+  const mission = created.json<Mission>();
+  const executed = await app.inject({ method: "POST", url: `/missions/${mission.id}/execute`, headers });
+  assert.equal(executed.statusCode, 502);
+  const body = executed.json();
+  assert.equal(body.error, "AI_PROVIDER_ERROR");
+  assert.doesNotMatch(JSON.stringify(body), /insufficient credits/);
 });
 
 test("a related mission reuses persistent memory from the previous mission", async () => {

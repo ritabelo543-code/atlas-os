@@ -92,7 +92,7 @@ O control plane nunca confunde simulação com operação real: sem métricas co
 
 O painel interno fica em `http://localhost:3000/operation`. Na base atual ele consolida Core, Executive Agent, execuções, memória, eventos, performance, decisões e plugins. As próximas versões devem substituir a ênfase técnica por oportunidades, campanhas, produtos, conteúdo, conversões, ROI, lucro, alertas e resultados.
 
-Providers reconhecidos: `mock`, `openai`, `claude`, `gemini`, `deepseek` e `ollama`. A v0.2 usa o protocolo OpenAI-compatible; Claude nativo exige um gateway compatível. O provider e o modelo efetivamente usados aparecem na decisão e na auditoria, sem exposição da chave.
+Providers reconhecidos: `mock`, `openai`, `claude`, `gemini`, `deepseek` e `ollama`. `openai`, `deepseek`, `gemini` e `ollama` usam o protocolo OpenAI-compatible; `claude` usa a Messages API nativa da Anthropic (`AnthropicAiProvider`, sem gateway). O provider e o modelo efetivamente usados aparecem na decisão e na auditoria, sem exposição da chave.
 
 Cada missão concluída gera memória persistente no SQLite com origem, missão, resumo, conteúdo, confiança, relevância, tags e timestamps. Missões posteriores recuperam registros relacionados por busca semântica local. O sistema evita conteúdo idêntico, remove memórias temporárias expiradas e mantém no máximo 500 itens.
 
