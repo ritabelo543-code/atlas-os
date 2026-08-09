@@ -4,6 +4,8 @@
 
 Atlas MVP finalizado ponta a ponta. API e Web iniciam localmente, o usuário cria uma missão na Mission Control, executa a análise, recebe uma decisão estruturada e consulta o histórico persistido. A API anterior de projetos e tarefas foi preservada.
 
+Desde a v1.1, o Executive Agent (missões) pode usar IA real (Claude, via `AnthropicAiProvider`) quando `AI_PROVIDER=claude` e há credencial/crédito configurados; sem isso, o fallback para `MockAiProvider` é automático. Os demais agentes (Market Research, Content Studio, Distribution, Learning, Scale, Company Orchestrator) ainda operam com regras determinísticas locais — ver v1.1 no roadmap para o que falta para estendê-los.
+
 ## Direção oficial do produto
 
 O Atlas OS deve operar uma empresa digital autônoma: pesquisar mercados e nichos, selecionar oportunidades e produtos, planejar e executar campanhas, produzir e distribuir conteúdo, medir conversões/ROI/lucro, aprender e escalar resultados vencedores.
@@ -98,6 +100,21 @@ A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, p
 - Build integral aprovado, incluindo `/scale`.
 - Política segura de orçamento zero produziu `hold`, orçamento proposto zero e riscos `unconfirmed-data`/`zero-budget-policy`.
 - Aprovação e execução simulada não realizaram transação financeira.
+
+## Sprint v1.1 — PROVIDER DE IA REAL (CLAUDE NATIVO) — CONCLUÍDA
+
+- `AnthropicAiProvider` implementado em `packages/core/src/v02.ts`, usando a Messages API nativa da Anthropic (`POST /v1/messages`, headers `x-api-key`/`anthropic-version`) em vez do protocolo OpenAI-compatible.
+- `resolveAiProvider` e `apps/api/src/atlas.ts` passam a construir `AnthropicAiProvider` quando `AI_PROVIDER=claude`; `MockAiProvider` continua o padrão sem credencial.
+- Timeout via `AbortController`, retry limitado a `429`/`5xx`, sem retry em `401`/`400`, e nenhuma exposição da chave em erros ou logs.
+- Nova classe `AiProviderError`, usada por `AnthropicAiProvider` e `CompatibleAiProvider`; o handler de erro da API mapeia falhas do provider para `502 AI_PROVIDER_ERROR` com mensagem segura, em vez do `500 INTERNAL_ERROR` genérico anterior.
+- PR: [#10](https://github.com/ritabelo543-code/atlas-os/pull/10) (draft, aguardando validação/merge).
+
+### Validação v1.1
+
+- Core: 12 testes aprovados (5 novos para `AnthropicAiProvider`, mock de `fetch`, sem chamada de rede). API: 20 testes aprovados (1 novo cobrindo o mapeamento para `502`).
+- Build integral do monorepo aprovado.
+- Validação real (fora da suíte automatizada, com credencial local): `/atlas/status` reportou `provider: anthropic`, `model: claude-sonnet-5`, `mode: live`; missão de teste executada com sucesso retornou `provider: anthropic` na decisão, com recomendação gerada pelo modelo real.
+- Cenário de falha real também validado: antes da compra de créditos, a chamada real retornou `502 AI_PROVIDER_ERROR` com mensagem segura (sem vazar o corpo do erro da Anthropic nem a chave).
 
 ## Sprint v1.0 — CONTROL PLANE CONCLUÍDO
 
