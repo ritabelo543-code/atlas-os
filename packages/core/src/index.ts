@@ -1,15 +1,20 @@
 import type { AtlasStatus, AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
 import { MemoryManager } from "./v02.js";
+import { AgentRuntime, PermissionManager } from "./v03.js";
 export { AgentRegistry, MemoryManager, PluginRegistry, resolveAiProvider } from "./v02.js";
+export { AgentRuntime, GitHubPlugin, PermissionManager, PluginRuntime } from "./v03.js";
+export { MarketIntelligence, scoreOpportunity, type MarketStores } from "./market.js";
+export { ContentStudio, type ContentStores } from "./content.js";
+export { DistributionCenter } from "./distribution.js";
+export { LearningEngine } from "./learning.js";
+export { ScaleEngine } from "./scale.js";
+export { CompanyOrchestrator, type CompanyStores } from "./company.js";
 
-export interface CollectionStore<T> { load(): Promise<T[]>; save(items: T[]): Promise<void> }
+export interface CollectionStore<T> { load(): Promise<T[]>; save(items: T[]): Promise<void>; close?(): void }
 export type AtlasEventMap = { "mission.created": Mission; "mission.completed": Mission; "decision.created": Decision; "knowledge.created": KnowledgeItem };
 export class EventBus<Events extends object = AtlasEventMap> {
   private listeners = new Map<keyof Events, Set<(payload: never) => void>>();
-  subscribe<K extends keyof Events>(event: K, listener: (payload: Events[K]) => void): () => void {
-    const set = this.listeners.get(event) ?? new Set(); set.add(listener as (payload: never) => void); this.listeners.set(event, set);
-    return () => set.delete(listener as (payload: never) => void);
-  }
+  subscribe<K extends keyof Events>(event: K, listener: (payload: Events[K]) => void): () => void { const set = this.listeners.get(event) ?? new Set(); set.add(listener as (payload: never) => void); this.listeners.set(event, set); return () => set.delete(listener as (payload: never) => void); }
   publish<K extends keyof Events>(event: K, payload: Events[K]): void { for (const listener of this.listeners.get(event) ?? []) listener(payload as never); }
 }
 
@@ -18,68 +23,55 @@ export type AiResult = { recommendation: string; rationale: string; confidence: 
 export interface AiProvider { readonly name: string; readonly model: string; readonly mode: "live" | "mock"; generate(request: AiRequest): Promise<AiResult> }
 export class MockAiProvider implements AiProvider {
   readonly name = "atlas-dev"; readonly model = "deterministic-v1"; readonly mode = "mock" as const;
-  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> {
-    const evidence = knowledge.length || memory.length ? `Foram encontrados ${knowledge.length} registro(s) de conhecimento e ${memory.length} memória(s) relevante(s).` : "Não há conhecimento histórico diretamente relacionado.";
-    const contextCount = knowledge.length + memory.length;
-    return { recommendation: `Validar a hipótese de “${mission.objective}” com um experimento pequeno e mensurável.`, rationale: `${evidence} O caminho recomendado reduz risco antes de ampliar investimento.`, confidence: contextCount ? Math.min(.85, .55 + contextCount * .08) : .42, nextSteps: ["Definir uma métrica de sucesso", "Executar um teste de baixo custo", "Registrar os resultados no Atlas"] };
-  }
+  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const evidence = knowledge.length || memory.length ? `Foram encontrados ${knowledge.length} registro(s) de conhecimento e ${memory.length} memória(s) relevante(s).` : "Não há conhecimento histórico diretamente relacionado."; const contextCount = knowledge.length + memory.length; return { recommendation: `Validar a hipótese de “${mission.objective}” com um experimento pequeno e mensurável.`, rationale: `${evidence} O caminho recomendado reduz risco antes de ampliar investimento.`, confidence: contextCount ? Math.min(.85, .55 + contextCount * .08) : .42, nextSteps: ["Definir uma métrica de sucesso", "Executar um teste de baixo custo", "Registrar os resultados no Atlas"] }; }
 }
 export class CompatibleAiProvider implements AiProvider {
   readonly mode = "live" as const;
   constructor(readonly name: string, readonly model: string, private readonly apiKey: string, private readonly baseUrl: string) {}
-  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> {
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array)." }, { role: "user", content: JSON.stringify({ mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }) }] }) });
-    if (!response.ok) throw new Error(`AI provider request failed (${response.status})`);
-    const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as AiResult;
-    if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new Error("AI provider returned an invalid response");
-    return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) };
-  }
+  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array)." }, { role: "user", content: JSON.stringify({ mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }) }] }) }); if (!response.ok) throw new Error(`AI provider request failed (${response.status})`); const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as AiResult; if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new Error("AI provider returned an invalid response"); return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) }; }
 }
 
 export class KnowledgeEngine {
   constructor(private readonly store: CollectionStore<KnowledgeItem>, private readonly events: EventBus) {}
-  async add(input: Omit<KnowledgeItem, "id" | "createdAt">): Promise<KnowledgeItem> { const item = { ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() }; const items = await this.store.load(); items.unshift(item); await this.store.save(items); this.events.publish("knowledge.created", item); return item; }
-  async search(query: string, limit = 5): Promise<KnowledgeItem[]> { const terms = query.toLowerCase().split(/\W+/).filter((term) => term.length > 2); const items = await this.store.load(); return items.map((item) => ({ item, score: terms.reduce((score, term) => score + (`${item.summary} ${item.content} ${item.context}`.toLowerCase().includes(term) ? 1 : 0), 0) + item.confidence / 10 })).filter(({ score }) => score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map(({ item }) => item); }
+  async add(input: Omit<KnowledgeItem, "id" | "createdAt">): Promise<KnowledgeItem> { const item = { namespace: "default", projectId: null, internalReferences: [], ...input, id: crypto.randomUUID(), createdAt: new Date().toISOString() }; const items = await this.store.load(); items.unshift(item); await this.store.save(items); this.events.publish("knowledge.created", item); return item; }
+  async search(query: string, limit = 5, scope: { namespace?: string; projectId?: string; ownerId?: string } = {}): Promise<KnowledgeItem[]> { const vector = semanticVector(query); const items = (await this.store.load()).filter((item) => (!scope.namespace || item.namespace === scope.namespace) && (!scope.projectId || item.projectId === scope.projectId) && (!scope.ownerId || item.ownerId === scope.ownerId)); return items.map((item) => ({ item, score: cosine(vector, semanticVector(`${item.summary} ${item.content} ${item.context} ${(item.tags ?? []).join(" ")}`)) + item.confidence / 10 })).filter(({ score }) => score > .05).sort((a, b) => b.score - a.score).slice(0, limit).map(({ item }) => item); }
 }
+function semanticVector(text: string): Map<string, number> { const words = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\W+/).filter((word) => word.length > 2); const terms = [...words, ...words.slice(0, -1).map((word, index) => `${word}_${words[index + 1]}`)]; const vector = new Map<string, number>(); for (const term of terms) vector.set(term, (vector.get(term) ?? 0) + 1); return vector; }
+function cosine(a: Map<string, number>, b: Map<string, number>): number { let dot = 0, aa = 0, bb = 0; for (const value of a.values()) aa += value * value; for (const value of b.values()) bb += value * value; for (const [key, value] of a) dot += value * (b.get(key) ?? 0); return aa && bb ? dot / Math.sqrt(aa * bb) : 0; }
 export class Guardian {
   constructor(private readonly auditStore: CollectionStore<AuditEntry>) {}
   async record(module: string, action: string, context: AuditEntry["context"], result: AuditEntry["result"]): Promise<void> { const entries = await this.auditStore.load(); entries.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), module, action, context, result }); await this.auditStore.save(entries.slice(0, 1000)); }
   validateMission(mission: Mission): boolean { return mission.title.trim().length > 0 && mission.objective.trim().length >= 10; }
 }
 
+type AtlasStores = { missions: CollectionStore<Mission>; decisions: CollectionStore<Decision>; knowledge: CollectionStore<KnowledgeItem>; audit: CollectionStore<AuditEntry>; memory: CollectionStore<MemoryItem> };
+export class AtlasExecutiveAgent {
+  readonly id = "atlas-executive";
+  constructor(private readonly provider: AiProvider, private readonly stores: AtlasStores, private readonly knowledge: KnowledgeEngine, private readonly memory: MemoryManager, private readonly guardian: Guardian, private readonly events: EventBus, private readonly permissions: PermissionManager) {}
+  async execute(mission: Mission, signal: AbortSignal): Promise<{ decision: Decision; memoryUsed: number }> {
+    this.permissions.require(`agent:${this.id}`, "mission.execute"); signal.throwIfAborted(); const missions = await this.stores.missions.load(); const storedMission = missions.find((item) => item.id === mission.id); if (!storedMission) throw new Error("Mission not found"); storedMission.status = "running"; storedMission.updatedAt = new Date().toISOString(); await this.stores.missions.save(missions);
+    try {
+      const query = `${storedMission.title} ${storedMission.objective} ${storedMission.context}`; const [knowledge, memory] = await Promise.all([this.knowledge.search(query, 5, { ownerId: storedMission.ownerId }), this.memory.context(query, storedMission.id, 5, storedMission.ownerId)]); signal.throwIfAborted(); this.permissions.require(`agent:${this.id}`, "provider.invoke"); const result = await this.provider.generate({ mission: storedMission, knowledge, memory }); signal.throwIfAborted(); const adjustedConfidence = Math.min(.95, result.confidence + Math.min(.1, (knowledge.length + memory.length) * .01)); const insufficient = adjustedConfidence < .3; const alternatives = ["Executar piloto controlado", "Coletar mais evidências", "Adiar investimento"];
+      const decision: Decision = { id: crypto.randomUUID(), missionId: storedMission.id, recommendation: insufficient ? "Dados insuficientes para uma recomendação segura." : result.recommendation, rationale: result.rationale, confidence: result.confidence, adjustedConfidence, nextSteps: result.nextSteps, executionPlan: result.nextSteps, outcome: insufficient ? "insufficient_data" : "recommendation", knowledgeIds: knowledge.map((item) => item.id), memoryIds: memory.map((item) => item.id), provider: this.provider.name, model: this.provider.model, createdAt: new Date().toISOString(), alternatives, risks: ["Evidência histórica limitada", "Resultado do piloto pode não escalar"], alternativeAnalysis: alternatives.map((option, index) => ({ option, impact: index === 0 ? "high" : "medium", cost: index === 0 ? "medium" : "low", risk: index === 2 ? "Perda de janela de oportunidade" : "Resultado inconclusivo", confidence: Math.max(.3, adjustedConfidence - index * .1) })) };
+      this.permissions.require(`agent:${this.id}`, "decision.persist"); const decisions = await this.stores.decisions.load(); decisions.unshift({ ...decision, ownerId: storedMission.ownerId }); await this.stores.decisions.save(decisions); const memoryItem = await this.memory.remember({ scope: "persistent", missionId: storedMission.id, ownerId: storedMission.ownerId, source: `mission:${storedMission.id}`, content: `${storedMission.title}. ${storedMission.objective}. Decisão: ${decision.recommendation}`, summary: decision.rationale, relevance: adjustedConfidence, confidence: adjustedConfidence, priority: adjustedConfidence, relatedMemoryIds: memory.map((item) => item.id), tags: query.toLowerCase().split(/\W+/).filter((term) => term.length > 3).slice(0, 12) }); storedMission.status = "completed"; storedMission.decisionId = decision.id; storedMission.updatedAt = new Date().toISOString(); await this.stores.missions.save(missions); await this.guardian.record("atlas-executive", "mission.execute", { missionId: storedMission.id, ownerId: storedMission.ownerId ?? null, decisionId: decision.id, memoryId: memoryItem.id, provider: this.provider.name, model: this.provider.model, memoryReused: memory.length }, "success"); this.events.publish("decision.created", decision); this.events.publish("mission.completed", storedMission); return { decision: { ...decision, ownerId: storedMission.ownerId }, memoryUsed: memory.length };
+    } catch (error) { storedMission.status = "failed"; storedMission.updatedAt = new Date().toISOString(); await this.stores.missions.save(missions); await this.guardian.record("atlas-executive", "mission.execute", { missionId: storedMission.id, provider: this.provider.name, model: this.provider.model }, "failure"); throw error; }
+  }
+}
+
 export class AtlasCore {
   private lifecycle: AtlasStatus["lifecycle"] = "stopped"; private startedAt: string | null = null;
-  readonly events = new EventBus(); readonly knowledge: KnowledgeEngine; readonly guardian: Guardian; readonly memory: MemoryManager;
-  constructor(private readonly provider: AiProvider, private readonly stores: { missions: CollectionStore<Mission>; decisions: CollectionStore<Decision>; knowledge: CollectionStore<KnowledgeItem>; audit: CollectionStore<AuditEntry>; memory: CollectionStore<MemoryItem> }) { this.knowledge = new KnowledgeEngine(stores.knowledge, this.events); this.guardian = new Guardian(stores.audit); this.memory = new MemoryManager(stores.memory); }
-  async start(): Promise<void> { if (this.lifecycle === "running") return; this.lifecycle = "starting"; await Promise.all(Object.values(this.stores).map((store) => store.load())); this.startedAt = new Date().toISOString(); this.lifecycle = "running"; }
-  async stop(): Promise<void> { this.lifecycle = "stopping"; this.lifecycle = "stopped"; }
-  status(): AtlasStatus { return { lifecycle: this.lifecycle, version: "0.2.0", startedAt: this.startedAt, modules: ["event-bus", "knowledge", "decision", "guardian", "memory", "agents", "plugins"].map((name) => ({ name, status: this.lifecycle === "running" ? "ready" : "stopped" })), ai: { provider: this.provider.name, model: this.provider.model, mode: this.provider.mode } }; }
-  async createMission(input: Pick<Mission, "title" | "objective" | "context">): Promise<Mission> { const now = new Date().toISOString(); const mission: Mission = { ...input, id: crypto.randomUUID(), status: "pending", createdAt: now, updatedAt: now, decisionId: null }; if (!this.guardian.validateMission(mission)) { await this.guardian.record("guardian", "mission.create", { title: mission.title }, "denied"); throw new Error("Mission did not pass guardian validation"); } const missions = await this.stores.missions.load(); missions.unshift(mission); await this.stores.missions.save(missions); await this.guardian.record("missions", "mission.create", { missionId: mission.id }, "success"); this.events.publish("mission.created", mission); return mission; }
-  listMissions(): Promise<Mission[]> { return this.stores.missions.load(); }
-  async getMission(id: string): Promise<Mission | undefined> { return (await this.stores.missions.load()).find((mission) => mission.id === id); }
-  async getDecision(id: string): Promise<Decision | undefined> { return (await this.stores.decisions.load()).find((decision) => decision.id === id); }
-  listDecisions(): Promise<Decision[]> { return this.stores.decisions.load(); }
-  listKnowledge(): Promise<KnowledgeItem[]> { return this.stores.knowledge.load(); }
+  readonly events = new EventBus(); readonly knowledge: KnowledgeEngine; readonly guardian: Guardian; readonly memory: MemoryManager; readonly permissions = new PermissionManager(); readonly agentRuntime = new AgentRuntime(); readonly executive: AtlasExecutiveAgent;
+  constructor(private readonly provider: AiProvider, private readonly stores: AtlasStores) { this.knowledge = new KnowledgeEngine(stores.knowledge, this.events); this.guardian = new Guardian(stores.audit); this.memory = new MemoryManager(stores.memory); this.permissions.grant("agent:atlas-executive", ["mission.execute", "provider.invoke", "decision.persist"]); this.agentRuntime.register({ id: "atlas-executive", name: "Atlas Executive Agent", role: "Autonomous mission execution", status: "registered", permissions: this.permissions.list("agent:atlas-executive") }); this.executive = new AtlasExecutiveAgent(provider, stores, this.knowledge, this.memory, this.guardian, this.events, this.permissions); }
+  async start(): Promise<void> { if (this.lifecycle === "running") return; this.lifecycle = "starting"; await Promise.all(Object.values(this.stores).map((store) => store.load())); this.agentRuntime.start("atlas-executive"); this.startedAt = new Date().toISOString(); this.lifecycle = "running"; }
+  async stop(): Promise<void> { this.lifecycle = "stopping"; this.agentRuntime.stop("atlas-executive"); for (const store of Object.values(this.stores)) store.close?.(); this.lifecycle = "stopped"; }
+  status(): AtlasStatus { return { lifecycle: this.lifecycle, version: "1.0.0", startedAt: this.startedAt, modules: ["event-bus", "semantic-knowledge", "decision-v3", "guardian", "memory-v3", "agent-runtime", "market-intelligence", "content-studio", "distribution-center", "learning-engine", "scale-engine", "company-orchestrator", "plugin-runtime", "permissions", "authentication", "sqlite"].map((name) => ({ name, status: this.lifecycle === "running" ? "ready" : "stopped" })), ai: { provider: this.provider.name, model: this.provider.model, mode: this.provider.mode } }; }
+  async createMission(input: Pick<Mission, "title" | "objective" | "context"> & { ownerId?: string }): Promise<Mission> { const now = new Date().toISOString(); const mission: Mission = { ...input, id: crypto.randomUUID(), status: "pending", createdAt: now, updatedAt: now, decisionId: null }; if (!this.guardian.validateMission(mission)) { await this.guardian.record("guardian", "mission.create", { title: mission.title }, "denied"); throw new Error("Mission did not pass guardian validation"); } const missions = await this.stores.missions.load(); missions.unshift(mission); await this.stores.missions.save(missions); await this.guardian.record("missions", "mission.create", { missionId: mission.id, ownerId: mission.ownerId ?? null }, "success"); this.events.publish("mission.created", mission); return mission; }
+  async listMissions(ownerId?: string): Promise<Mission[]> { const missions = await this.stores.missions.load(); return ownerId ? missions.filter((mission) => mission.ownerId === ownerId) : missions; }
+  async getMission(id: string, ownerId?: string): Promise<Mission | undefined> { return (await this.stores.missions.load()).find((mission) => mission.id === id && (!ownerId || mission.ownerId === ownerId)); }
+  async getDecision(id: string, ownerId?: string): Promise<Decision | undefined> { return (await this.stores.decisions.load()).find((decision) => decision.id === id && (!ownerId || decision.ownerId === ownerId)); }
+  async listDecisions(ownerId?: string): Promise<Decision[]> { const items = await this.stores.decisions.load(); return ownerId ? items.filter((item) => item.ownerId === ownerId) : items; }
+  async listKnowledge(ownerId?: string): Promise<KnowledgeItem[]> { const items = await this.stores.knowledge.load(); return ownerId ? items.filter((item) => item.ownerId === ownerId) : items; }
   listAudit(): Promise<AuditEntry[]> { return this.stores.audit.load(); }
-  listMemory(): Promise<MemoryItem[]> { return this.memory.list(); }
-  async executeMission(id: string): Promise<Decision | undefined> {
-    const missions = await this.stores.missions.load(); const mission = missions.find((item) => item.id === id); if (!mission) return undefined;
-    mission.status = "running"; mission.updatedAt = new Date().toISOString(); await this.stores.missions.save(missions);
-    try {
-      const query = `${mission.title} ${mission.objective} ${mission.context}`;
-      const [knowledge, memory] = await Promise.all([this.knowledge.search(query), this.memory.context(query, mission.id)]);
-      const result = await this.provider.generate({ mission, knowledge, memory });
-      const insufficient = result.confidence < .3;
-      const decision: Decision = { id: crypto.randomUUID(), missionId: mission.id, recommendation: insufficient ? "Dados insuficientes para uma recomendação segura." : result.recommendation, rationale: result.rationale, confidence: result.confidence, nextSteps: result.nextSteps, outcome: insufficient ? "insufficient_data" : "recommendation", knowledgeIds: knowledge.map((item) => item.id), memoryIds: memory.map((item) => item.id), provider: this.provider.name, model: this.provider.model, createdAt: new Date().toISOString() };
-      const decisions = await this.stores.decisions.load(); decisions.unshift(decision); await this.stores.decisions.save(decisions);
-      await this.memory.remember({ scope: "persistent", missionId: mission.id, source: `mission:${mission.id}`, content: `${mission.title}. ${mission.objective}. Decisão: ${decision.recommendation}`, summary: decision.rationale, relevance: decision.confidence, confidence: decision.confidence, tags: query.toLowerCase().split(/\W+/).filter((term) => term.length > 3).slice(0, 12) });
-      mission.status = "completed"; mission.decisionId = decision.id; mission.updatedAt = new Date().toISOString(); await this.stores.missions.save(missions);
-      await this.guardian.record("decision", "decision.create", { missionId: mission.id, decisionId: decision.id, provider: this.provider.name, model: this.provider.model, memoryReused: memory.length }, "success");
-      this.events.publish("decision.created", decision); this.events.publish("mission.completed", mission); return decision;
-    } catch (error) {
-      mission.status = "failed"; mission.updatedAt = new Date().toISOString(); await this.stores.missions.save(missions);
-      await this.guardian.record("decision", "decision.create", { missionId: mission.id, provider: this.provider.name, model: this.provider.model }, "failure"); throw error;
-    }
-  }
+  async listMemory(ownerId?: string): Promise<MemoryItem[]> { const items = await this.memory.list(); return ownerId ? items.filter((item) => item.ownerId === ownerId) : items; }
+  async executeMission(id: string, ownerId?: string): Promise<Decision | undefined> { const mission = await this.getMission(id, ownerId); if (!mission) return undefined; return this.agentRuntime.run("atlas-executive", id, async (signal) => { const value = await this.executive.execute(mission, signal); return { result: value.decision, memoryUsed: value.memoryUsed, provider: this.provider.name }; }, 30_000, mission.ownerId); }
 }

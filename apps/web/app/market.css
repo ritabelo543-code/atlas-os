@@ -1,0 +1,6 @@
+.market-summary{display:flex;gap:10px;align-items:baseline;margin-bottom:18px;color:var(--muted)}
+.market-summary strong{font-size:26px;color:#24443e;margin-left:18px}.market-summary strong:first-child{margin-left:0}
+.opportunity-panel{max-height:760px;overflow:auto}.opportunity{position:relative;border-top:1px solid var(--line);padding:18px 0}
+.opportunity h3{margin:8px 0 3px}.opportunity p{font-size:13px;color:#555}.opportunity .score{position:absolute;right:0;top:18px;font-size:28px;color:#427368}
+.opportunity details{margin-top:10px;font-size:12px}.opportunity summary{cursor:pointer;color:#427368}.compact{margin-bottom:14px}
+@media(max-width:800px){.market-summary{flex-wrap:wrap}}

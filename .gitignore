@@ -17,6 +17,8 @@ apps/api/data/*.bak
 .env
 .env.*
 !.env.example
+.secrets/
+**/.secrets/
 
 # Logs
 *.log
@@ -27,3 +29,11 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Banco de dados local e artefatos de trabalho (Atlas OS)
+apps/api/data/*.db
+apps/api/data/*.db-shm
+apps/api/data/*.db-wal
+apps/api/data/*.db.secret
+apps/api/src.zip
+work/

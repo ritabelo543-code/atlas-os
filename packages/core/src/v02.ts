@@ -5,18 +5,18 @@ export class MemoryManager {
   constructor(private readonly store: CollectionStore<MemoryItem>, private readonly retentionDays = 30, private readonly maxItems = 500) {}
   async remember(input: Omit<MemoryItem, "id" | "createdAt" | "updatedAt" | "expiresAt"> & { expiresAt?: string | null }): Promise<MemoryItem> {
     const now = new Date();
-    const item: MemoryItem = { ...input, id: crypto.randomUUID(), createdAt: now.toISOString(), updatedAt: now.toISOString(), expiresAt: input.expiresAt ?? (input.scope === "temporary" ? new Date(now.getTime() + this.retentionDays * 86400000).toISOString() : null) };
+    const item: MemoryItem = { ...input, priority: input.priority ?? 0.5, favorite: input.favorite ?? false, relatedMemoryIds: input.relatedMemoryIds ?? [], id: crypto.randomUUID(), createdAt: now.toISOString(), updatedAt: now.toISOString(), expiresAt: input.expiresAt ?? (input.scope === "temporary" ? new Date(now.getTime() + this.retentionDays * 86400000).toISOString() : null) };
     const items = (await this.store.load()).filter((entry) => !entry.expiresAt || entry.expiresAt > now.toISOString());
     const duplicate = items.find((entry) => entry.content.trim().toLowerCase() === item.content.trim().toLowerCase());
     if (duplicate) return duplicate;
     items.unshift(item); await this.store.save(items.slice(0, this.maxItems)); return item;
   }
-  async context(query: string, excludeMissionId?: string, limit = 5): Promise<MemoryItem[]> {
+  async context(query: string, excludeMissionId?: string, limit = 5, ownerId?: string): Promise<MemoryItem[]> {
     const now = new Date().toISOString();
     const terms = new Set(query.toLowerCase().split(/\W+/).filter((term) => term.length > 2));
     return (await this.store.load())
-      .filter((item) => (!item.expiresAt || item.expiresAt > now) && item.missionId !== excludeMissionId)
-      .map((item) => ({ item, score: [...terms].reduce((score, term) => score + (`${item.summary} ${item.content} ${item.tags.join(" ")}`.toLowerCase().includes(term) ? 1 : 0), 0) + item.relevance + item.confidence / 10 }))
+      .filter((item) => (!item.expiresAt || item.expiresAt > now) && item.missionId !== excludeMissionId && (!ownerId || item.ownerId === ownerId))
+      .map((item) => { const ageDays = Math.max(0, (Date.now() - Date.parse(item.updatedAt)) / 86400000); const decay = Math.exp(-ageDays / this.retentionDays); const lexical = [...terms].reduce((score, term) => score + (`${item.summary} ${item.content} ${item.tags.join(" ")}`.toLowerCase().includes(term) ? 1 : 0), 0); return { item, score: lexical + item.relevance * decay + item.confidence / 10 + (item.priority ?? .5) + (item.favorite ? 1 : 0) }; })
       .filter(({ score }) => score > 1).sort((a, b) => b.score - a.score).slice(0, limit).map(({ item }) => item);
   }
   list(): Promise<MemoryItem[]> { return this.store.load(); }
