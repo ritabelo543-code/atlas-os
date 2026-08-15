@@ -1,4 +1,5 @@
 import type { AiProvider, CollectionStore } from "./index.js";
+import { AnthropicAiProvider } from "./providers/anthropic.js";
 import type { AtlasAgent, MemoryItem, PluginManifest } from "@atlas/types";
 
 export class MemoryManager {
@@ -23,4 +24,17 @@ export class MemoryManager {
 }
 export class AgentRegistry { private readonly agents: AtlasAgent[] = [{ id:"ceo",name:"CEO Agent",role:"Strategic direction",status:"registered" },{ id:"architect",name:"Architect Agent",role:"System design",status:"registered" },{ id:"developer",name:"Developer Agent",role:"Implementation support",status:"registered" },{ id:"knowledge",name:"Knowledge Agent",role:"Knowledge curation",status:"registered" },{ id:"qa",name:"QA Agent",role:"Quality assurance",status:"registered" }]; list(): AtlasAgent[] { return [...this.agents]; } }
 export class PluginRegistry { private readonly plugins: PluginManifest[] = ["GitHub","Gmail","Google Calendar","Slack","Notion","REST APIs"].map((name) => ({ id:name.toLowerCase().replace(/\s+/g,"-"),name,version:"planned",enabled:false,capabilities:[] })); list(): PluginManifest[] { return [...this.plugins]; } }
-export function resolveAiProvider(config: { provider?: string; model?: string; apiKey?: string; baseUrl?: string }, fallback: AiProvider, createCompatible: (name: string, model: string, key: string, baseUrl: string) => AiProvider): AiProvider { if (!config.apiKey || config.provider === "mock") return fallback; const provider = config.provider ?? "openai"; const urls: Record<string,string> = { openai:"https://api.openai.com/v1", deepseek:"https://api.deepseek.com/v1", ollama:"http://localhost:11434/v1", claude:"https://api.anthropic.com/v1", gemini:"https://generativelanguage.googleapis.com/v1beta/openai" }; return createCompatible(provider, config.model ?? "gpt-5-mini", config.apiKey, config.baseUrl ?? urls[provider] ?? urls.openai); }
+export function resolveAiProvider(config: { provider?: string; model?: string; apiKey?: string; baseUrl?: string }, fallback: AiProvider, createCompatible: (name: string, model: string, key: string, baseUrl: string) => AiProvider): AiProvider {
+  if (!config.apiKey || config.provider === "mock") return fallback;
+  const provider = config.provider ?? "openai";
+  if (provider === "claude") {
+    return new AnthropicAiProvider(config.model ?? "claude-sonnet-4-6", config.apiKey, config.baseUrl ?? "https://api.anthropic.com");
+  }
+  const urls: Record<string, string> = {
+    openai: "https://api.openai.com/v1",
+    deepseek: "https://api.deepseek.com/v1",
+    ollama: "http://localhost:11434/v1",
+    gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
+  };
+  return createCompatible(provider, config.model ?? "gpt-5-mini", config.apiKey, config.baseUrl ?? urls[provider] ?? urls.openai);
+}
