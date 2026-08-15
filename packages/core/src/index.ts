@@ -1,8 +1,9 @@
-import type { AtlasStatus, AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
+import type { AtlasStatus, AuditEntry, ContentChannel, ContentFormat, ContentPlan, ContentVariant, Decision, KnowledgeItem, MarketEvidence, MarketOpportunity, MarketSignal, MemoryItem, Mission, PerformanceRecord } from "@atlas/types";
 import { MemoryManager } from "./v02.js";
 import { AgentRuntime, PermissionManager } from "./v03.js";
+import { AiProviderError } from "./providers/anthropic.js";
 export { AgentRegistry, MemoryManager, PluginRegistry, resolveAiProvider } from "./v02.js";
-export { AnthropicAiProvider } from "./providers/anthropic.js";
+export { AiProviderError, AnthropicAiProvider } from "./providers/anthropic.js";
 export { AgentRuntime, GitHubPlugin, PermissionManager, PluginRuntime } from "./v03.js";
 export { MarketIntelligence, scoreOpportunity, type MarketStores } from "./market.js";
 export { ContentStudio, type ContentStores } from "./content.js";
@@ -21,7 +22,14 @@ export class EventBus<Events extends object = AtlasEventMap> {
 
 export type AiRequest = { mission: Mission; knowledge: KnowledgeItem[]; memory: MemoryItem[] };
 export type AiResult = { recommendation: string; rationale: string; confidence: number; nextSteps: string[] };
-export interface AiProvider { readonly name: string; readonly model: string; readonly mode: "live" | "mock"; generate(request: AiRequest): Promise<AiResult> }
+export type ContentAiRequest = { opportunity: MarketOpportunity; plan: ContentPlan; channel: ContentChannel; format: ContentFormat; instructions?: string };
+export type ContentAiResult = { title: string; body: string; cta: string; variants: ContentVariant[]; designBrief?: string };
+export type MarketAiRequest = { market: string; niche: string; audience: string; painOrDesire: string; evidence: MarketEvidence[] };
+export type MarketAiSignal = { kind: MarketSignal["kind"]; direction: MarketSignal["direction"] };
+export type MarketAiResult = { signals: MarketAiSignal[]; rankingRationale: string };
+export type LearningAiRequest = { winner: PerformanceRecord; recordCount: number; recommendation: string };
+export type LearningAiResult = { summary: string };
+export interface AiProvider { readonly name: string; readonly model: string; readonly mode: "live" | "mock"; generate(request: AiRequest): Promise<AiResult>; generateContent?(request: ContentAiRequest): Promise<ContentAiResult>; analyzeMarket?(request: MarketAiRequest): Promise<MarketAiResult>; summarizeInsight?(request: LearningAiRequest): Promise<LearningAiResult> }
 export class MockAiProvider implements AiProvider {
   readonly name = "atlas-dev"; readonly model = "deterministic-v1"; readonly mode = "mock" as const;
   async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const evidence = knowledge.length || memory.length ? `Foram encontrados ${knowledge.length} registro(s) de conhecimento e ${memory.length} memória(s) relevante(s).` : "Não há conhecimento histórico diretamente relacionado."; const contextCount = knowledge.length + memory.length; return { recommendation: `Validar a hipótese de “${mission.objective}” com um experimento pequeno e mensurável.`, rationale: `${evidence} O caminho recomendado reduz risco antes de ampliar investimento.`, confidence: contextCount ? Math.min(.85, .55 + contextCount * .08) : .42, nextSteps: ["Definir uma métrica de sucesso", "Executar um teste de baixo custo", "Registrar os resultados no Atlas"] }; }
@@ -29,7 +37,7 @@ export class MockAiProvider implements AiProvider {
 export class CompatibleAiProvider implements AiProvider {
   readonly mode = "live" as const;
   constructor(readonly name: string, readonly model: string, private readonly apiKey: string, private readonly baseUrl: string) {}
-  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array)." }, { role: "user", content: JSON.stringify({ mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }) }] }) }); if (!response.ok) throw new Error(`AI provider request failed (${response.status})`); const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as AiResult; if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new Error("AI provider returned an invalid response"); return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) }; }
+  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array)." }, { role: "user", content: JSON.stringify({ mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }) }] }) }); if (!response.ok) throw new AiProviderError(`AI provider request failed (${response.status})`, response.status); const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as AiResult; if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new AiProviderError("AI provider returned an invalid response"); return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) }; }
 }
 
 export class KnowledgeEngine {
@@ -62,7 +70,7 @@ export class AtlasExecutiveAgent {
 export class AtlasCore {
   private lifecycle: AtlasStatus["lifecycle"] = "stopped"; private startedAt: string | null = null;
   readonly events = new EventBus(); readonly knowledge: KnowledgeEngine; readonly guardian: Guardian; readonly memory: MemoryManager; readonly permissions = new PermissionManager(); readonly agentRuntime = new AgentRuntime(); readonly executive: AtlasExecutiveAgent;
-  constructor(private readonly provider: AiProvider, private readonly stores: AtlasStores) { this.knowledge = new KnowledgeEngine(stores.knowledge, this.events); this.guardian = new Guardian(stores.audit); this.memory = new MemoryManager(stores.memory); this.permissions.grant("agent:atlas-executive", ["mission.execute", "provider.invoke", "decision.persist"]); this.agentRuntime.register({ id: "atlas-executive", name: "Atlas Executive Agent", role: "Autonomous mission execution", status: "registered", permissions: this.permissions.list("agent:atlas-executive") }); this.executive = new AtlasExecutiveAgent(provider, stores, this.knowledge, this.memory, this.guardian, this.events, this.permissions); }
+  constructor(readonly provider: AiProvider, private readonly stores: AtlasStores) { this.knowledge = new KnowledgeEngine(stores.knowledge, this.events); this.guardian = new Guardian(stores.audit); this.memory = new MemoryManager(stores.memory); this.permissions.grant("agent:atlas-executive", ["mission.execute", "provider.invoke", "decision.persist"]); this.agentRuntime.register({ id: "atlas-executive", name: "Atlas Executive Agent", role: "Autonomous mission execution", status: "registered", permissions: this.permissions.list("agent:atlas-executive") }); this.executive = new AtlasExecutiveAgent(provider, stores, this.knowledge, this.memory, this.guardian, this.events, this.permissions); }
   async start(): Promise<void> { if (this.lifecycle === "running") return; this.lifecycle = "starting"; await Promise.all(Object.values(this.stores).map((store) => store.load())); this.agentRuntime.start("atlas-executive"); this.startedAt = new Date().toISOString(); this.lifecycle = "running"; }
   async stop(): Promise<void> { this.lifecycle = "stopping"; this.agentRuntime.stop("atlas-executive"); for (const store of Object.values(this.stores)) store.close?.(); this.lifecycle = "stopped"; }
   status(): AtlasStatus { return { lifecycle: this.lifecycle, version: "1.0.0", startedAt: this.startedAt, modules: ["event-bus", "semantic-knowledge", "decision-v3", "guardian", "memory-v3", "agent-runtime", "market-intelligence", "content-studio", "distribution-center", "learning-engine", "scale-engine", "company-orchestrator", "plugin-runtime", "permissions", "authentication", "sqlite"].map((name) => ({ name, status: this.lifecycle === "running" ? "ready" : "stopped" })), ai: { provider: this.provider.name, model: this.provider.model, mode: this.provider.mode } }; }

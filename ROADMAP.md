@@ -63,3 +63,13 @@ Políticas, propostas, aprovação e simulação foram entregues. Execução fin
 - Operação humana por exceção, com controles de segurança e aprovação para ações críticas.
 
 O Atlas COO coordena e avalia o ciclo completo, identifica gargalos e recomenda a próxima ação. A autonomia externa permanece bloqueada até existirem conectores reais, dados confirmados e orçamento autorizado.
+
+## v1.1 — Provider Anthropic Nativo — CONCLUÍDA
+
+- `AnthropicAiProvider` nativo (endpoint `/v1/messages`), com timeout, retry com backoff e auditoria de resposta.
+- Falhas do provider de IA passam a ser mapeadas para `502 AI_PROVIDER_ERROR` em vez de erro genérico.
+
+## v1.2 — IA Real em Content, Market e Learning — CONCLUÍDA
+
+- Content Studio, Market Intelligence e Learning Engine passam a usar o provider Anthropic real quando configurado (`generateContent`, `analyzeMarket`, `summarizeInsight`), preservando fallback determinístico e mantendo pontuação comercial e recomendações de escala 100% determinísticas.
+- Reintegra ao `main` o trabalho de IA real já realizado em 8–9/08 (branches `agent/anthropic-provider`, `agent/content-studio-ai`, `agent/market-ai`, `agent/learning-ai`), reconciliado com o provider validado em produção pelo PR #15.

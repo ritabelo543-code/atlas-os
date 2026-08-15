@@ -10,6 +10,24 @@ O Atlas OS deve operar uma empresa digital autônoma: pesquisar mercados e nicho
 
 A auditoria de alinhamento confirmou que Core, Event Bus, Guardian, providers, persistência, autenticação e runtimes são fundações válidas. Mission Control, Atlas Operation, Knowledge, Memory, Decision Engine, agentes, plugins, prompts e contratos de missão ainda precisam ser orientados a resultados comerciais. GitHub e agentes de TI permanecem apenas como legado auxiliar, sem prioridade no roadmap do produto.
 
+## Sprint v1.2 — IA real em Content Studio, Market Intelligence e Learning Engine — CONCLUÍDA
+
+Retoma e reintegra ao `main` o trabalho de IA real feito em 8–9/08 nas branches `agent/anthropic-provider` → `agent/content-studio-ai` → `agent/market-ai` → `agent/learning-ai`, que havia ficado sem merge. Reconciliado com o provider Anthropic nativo já validado em produção pelo PR #15 (`packages/core/src/providers/anthropic.ts`): a implementação do `main` foi preservada como base e estendida com os três novos métodos, em vez de substituída.
+
+- `AiProvider` ganha três capacidades opcionais: `generateContent()`, `analyzeMarket()` e `summarizeInsight()`, implementadas em `AnthropicAiProvider` através de um `callMessages()` interno compartilhado (mesmo timeout, retry e tratamento de erro do provider de missões).
+- Content Studio usa IA real para gerar título, corpo, CTA, três variantes e briefing visual quando um provider `live` está configurado; caso contrário mantém os templates determinísticos. O disclosure de afiliado continua sendo anexado em código, nunca confiado à saída do modelo. `ContentAsset` passa a registrar `provider`/`model` quando gerado por IA.
+- Market Intelligence usa IA real para classificar cada evidência (`kind`/`direction`) e escrever `rankingRationale`, no lugar da checagem por palavras-chave; a pontuação comercial (`scoreOpportunity`) continua 100% determinística e nunca é gerada por IA. `MarketResearch` passa a registrar `aiProvider`/`aiModel` quando aplicável.
+- Learning Engine usa IA real para escrever o resumo narrativo do insight a partir das métricas exatas do vencedor; a recomendação (repetir/revisar) e a confiança continuam determinísticas, pois alimentam diretamente as decisões de orçamento do Scale Engine. `LearningInsight` passa a registrar `aiProvider`/`aiModel` quando aplicável.
+- `AiProviderError` (já existente para o fluxo de missões) passa a cobrir também JSON malformado/truncado; as rotas `/content/assets`, `/market/research` e `/learning/opportunities/:id/analyze` agora repassam falhas do provider de IA como `502 AI_PROVIDER_ERROR` estruturado, em vez de um `400` genérico.
+- `AtlasCore.provider` passa a ser público para que a API reutilize a mesma instância de provider resolvida em missões, conteúdo, mercado e aprendizado.
+
+### Validação v1.2
+
+- Corrigido um bug pré-existente no script `test` de `@atlas/core` (glob `dist/**/*.test.js` sem aspas era expandido pelo shell de forma não recursiva e silenciava `core.test.ts`, `market.test.ts` e `v03.test.ts`, rodando só os testes do provider Anthropic). Após a correção: Core 25 testes aprovados (era 9 aparentes); API 25 testes aprovados (era 19, todos os antigos preservados).
+- `pnpm turbo run build`: aprovado (Core, API, Web, types).
+- Testes cobrem: resposta estruturada de cada método de IA, erro estruturado em JSON malformado/truncado, fallback determinístico quando não há provider `live`, pontuação de mercado e recomendação de aprendizado permanecendo idênticas com e sem IA, e mapeamento de falha do provider para 502 em cada rota.
+- Validado apenas com providers mock/fake nesta reintegração; a validação end-to-end com credenciais reais registrada nos commits originais (8–9/08) não foi re-executada nesta sessão.
+
 ## Sprint v0.5 — CONCLUÍDA
 
 - Modelo comercial para pesquisas, evidências, sinais, ofertas e oportunidades, com origem e natureza do dado explícitas.
