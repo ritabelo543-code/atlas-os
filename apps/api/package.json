@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "pnpm --filter @atlas/core build && tsc",
     "start": "node dist/server.js",
     "test": "pnpm --filter @atlas/core build && tsc -p tsconfig.test.json && node --test test-dist/test/**/*.test.js"
