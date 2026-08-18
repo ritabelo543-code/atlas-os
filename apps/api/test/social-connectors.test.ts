@@ -11,6 +11,21 @@ test("Instagram official connector creates, verifies and publishes a media conta
   assert.equal(calls.length, 3);
 });
 
+test("Instagram connector waits for asynchronous media processing", async () => {
+  let statusChecks = 0;
+  const waits: number[] = [];
+  const client = new InstagramGraphClient("account", "token", "v23.0", "https://graph.facebook.com", { attempts: 3, intervalMs: 25 }, async (milliseconds) => { waits.push(milliseconds); });
+  const result = await client.publishImage("https://media.example/image.png", "Legenda", async (input) => {
+    const url = String(input);
+    if (url.includes("/account/media_publish")) return new Response(JSON.stringify({ id: "post-2" }), { status: 200 });
+    if (url.includes("fields=status_code")) return new Response(JSON.stringify({ status_code: ++statusChecks === 1 ? "IN_PROGRESS" : "FINISHED" }), { status: 200 });
+    return new Response(JSON.stringify({ id: "container-2" }), { status: 200 });
+  });
+  assert.equal(result.externalId, "post-2");
+  assert.equal(statusChecks, 2);
+  assert.deepEqual(waits, [25]);
+});
+
 test("Instagram official connector refuses local or insecure media", async () => {
   await assert.rejects(() => new InstagramGraphClient("account", "token").publishImage("http://localhost/image.png", "Legenda"), /HTTPS/);
 });
