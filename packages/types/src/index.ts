@@ -97,7 +97,8 @@ export type GenerateContentInput = { planId: string; channel: ContentChannel; fo
 
 export type DistributionMode = "dry_run" | "live";
 export type DistributionStatus = "draft" | "approved" | "scheduled" | "completed" | "failed" | "cancelled";
-export type DistributionCampaign = { id: string; ownerId: string; assetId: string; opportunityId: string; channel: ContentChannel; destination: string; scheduledAt: string; status: DistributionStatus; mode: DistributionMode; trackingUrl: string; utm: { source: string; medium: string; campaign: string; content: string }; approvedAt?: string; executedAt?: string; externalId?: string; result?: { delivered: boolean; detail: string }; createdAt: string; updatedAt: string };
+export type DistributionCampaign = { id: string; ownerId: string; assetId: string; opportunityId: string; channel: ContentChannel; destination: string; scheduledAt: string; status: DistributionStatus; mode: DistributionMode; trackingUrl: string; targetUrl?: string; utm: { source: string; medium: string; campaign: string; content: string }; approvedAt?: string; executedAt?: string; externalId?: string; result?: { delivered: boolean; detail: string }; createdAt: string; updatedAt: string };
+export type CampaignClick = { id: string; campaignId: string; ownerId: string; channel: ContentChannel; occurredAt: string; dataKind: "confirmed"; source: "radar-redirect" };
 export type CreateDistributionInput = { assetId: string; channel: ContentChannel; destination: string; scheduledAt: string; targetUrl: string; campaignName: string; mode?: DistributionMode };
 
 export type CampaignMetrics = { impressions: number; clicks: number; conversions: number; cost: number; revenue: number };

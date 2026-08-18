@@ -17,7 +17,7 @@ function memoryStore<T>(initial: T[] = []): JsonStore<T> {
   let values = structuredClone(initial);
   return { load: async () => structuredClone(values), save: async (next) => { values = structuredClone(next); } };
 }
-async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [], aiProvider: AiProvider = new MockAiProvider(), imageClient?: OpenAIImageClient) {
+async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [], aiProvider: AiProvider = new MockAiProvider(), imageClient?: OpenAIImageClient, trackingBaseUrl = "") {
   const projects = new ProjectService(new ProjectRepository(memoryStore<Project>(initialProjects)));
   const tasks = new TaskService(new TaskRepository(memoryStore<Task>(initialTasks)));
   const atlas = new AtlasCore(aiProvider, { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
@@ -25,7 +25,7 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const opportunityStore = memoryStore<MarketOpportunity>(); const runtime = new AgentRuntime(); const permissions = new PermissionManager(); const guardian = new Guardian(memoryStore<AuditEntry>());
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions, aiProvider);
   const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions, aiProvider);
-  const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions, aiProvider); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
+  const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions, [], trackingBaseUrl); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions, aiProvider); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
   const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, imageClient, logger: false });
   apps.push(app);
   return app;
@@ -294,6 +294,29 @@ test("Shopee tracking redirect records confirmed clicks without personal data", 
   assert.equal(clicks.json()[0].dataKind, "confirmed");
   assert.equal(JSON.stringify(clicks.json()).includes("ip"), false);
   await app.close();
+});
+
+test("campaign redirect records a confirmed click and forwards to the UTM destination", async () => {
+  const app = await testApp([], [], new MockAiProvider(), undefined, "https://api.example");
+  const owner = await authHeaders(app, "campaign-tracking@example.com");
+  const research = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload: { query: "casa", market: "Afiliados", niche: "organização", audience: "adultos", painOrDesire: "organizar a casa", channels: ["instagram"], evidence: [{ source: "fixture", observedAt: new Date().toISOString(), excerpt: "teste", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta", provider: "fixture" }], metrics: { demand: 70, commercialIntent: 70, competition: 40, monetization: 70, margin: 60, effort: 30, risk: 20, evidenceQuality: 70, confidence: 70, scalability: 70 }, dataKind: "simulated" } });
+  const opportunityId = research.json().opportunities[0].id;
+  const plan = (await app.inject({ method: "POST", url: "/content/plans", headers: owner, payload: { opportunityId, objective: "Apresentar produto", funnelStage: "conversion", channels: ["instagram"], keywords: ["casa"], tone: "claro" } })).json<ContentPlan>();
+  const asset = (await app.inject({ method: "POST", url: "/content/assets", headers: owner, payload: { planId: plan.id, channel: "instagram", format: "social-post" } })).json<ContentAsset>();
+  await app.inject({ method: "PATCH", url: `/content/assets/${asset.id}/review`, headers: owner, payload: { status: "approved" } });
+  const campaign = (await app.inject({ method: "POST", url: "/distribution/campaigns", headers: owner, payload: { assetId: asset.id, channel: "instagram", destination: "Perfil", scheduledAt: new Date().toISOString(), targetUrl: "https://go.hotmart.com/V107180956B", campaignName: "Radar Casa" } })).json<DistributionCampaign>();
+  assert.equal(campaign.trackingUrl, `https://api.example/r/campaign/${campaign.id}`);
+  await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/approve`, headers: owner });
+  await app.inject({ method: "POST", url: `/distribution/campaigns/${campaign.id}/schedule`, headers: owner });
+  const redirect = await app.inject({ method: "GET", url: `/r/campaign/${campaign.id}` });
+  assert.equal(redirect.statusCode, 302);
+  assert.match(String(redirect.headers.location), /go\.hotmart\.com/);
+  assert.match(String(redirect.headers.location), /utm_source=instagram/);
+  assert.equal(redirect.headers["cache-control"], "no-store");
+  const clicks = await app.inject({ method: "GET", url: "/distribution/clicks", headers: owner });
+  assert.equal(clicks.json().length, 1);
+  assert.equal(clicks.json()[0].dataKind, "confirmed");
+  assert.equal(JSON.stringify(clicks.json()).includes("ip"), false);
 });
 
 test("Hotmart affiliate redirect records confirmed clicks when catalog API is empty", async () => {
