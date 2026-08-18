@@ -2,6 +2,20 @@
 
 Atlas OS é o sistema operacional de uma empresa digital automatizada. Ele pesquisa oportunidades, escolhe produtos e estratégias, coordena execução, marketing e conteúdo, mede resultados, aprende com desempenho e escala iniciativas lucrativas.
 
+## Estado operacional verificado
+
+O Atlas distingue capacidade implementada de integração operacional:
+
+- API, Web, autenticação, SQLite, IA Anthropic, conteúdo, aprovação e rastreamento foram validados localmente.
+- Hotmart autentica em produção e sincroniza dados em modo somente leitura. A conta atualmente pode retornar zero produtos, ofertas e vendas.
+- Shopee usa links de afiliado criados no portal oficial e registra cliques confirmados por redirecionamento, sem armazenar IP.
+- Imagens reais podem ser geradas pela OpenAI somente após aprovação do conteúdo e ação explícita do usuário.
+- Instagram e TikTok usam apenas APIs oficiais. Usuário e senha comuns nunca são tratados como autorização de publicação.
+- Publicação real exige token OAuth oficial e `ATLAS_PUBLIC_URL` HTTPS. Sem esses requisitos, o modo `live` permanece indisponível.
+- Escala financeira real permanece desativada até existirem conversões confirmadas e orçamento autorizado.
+
+Consulte `GET /atlas/readiness` autenticado para verificar cada integração sem expor segredos.
+
 O Mission Control, os agentes, Knowledge, Memory, Decision Engine, Guardian e plugins existem para fortalecer o ciclo comercial: mercado → pesquisa → oportunidade → planejamento → execução → distribuição → medição → aprendizado → otimização → escala → lucro.
 
 ## Executar localmente
@@ -46,7 +60,7 @@ O Content Studio em `http://localhost:3000/content` transforma uma oportunidade 
 
 As coleções `content_plans` e `content_assets` são persistidas no SQLite e auditadas pelo Guardian.
 
-## Distribuição automática v0.7
+## Distribuição controlada v0.7+
 
 O Distribution Center em `http://localhost:3000/distribution` prepara campanhas somente a partir de conteúdo aprovado. O fluxo inclui aprovação, agendamento, UTMs e execução simulada. Nenhuma postagem externa ocorre na configuração atual.
 
@@ -56,7 +70,7 @@ O Distribution Center em `http://localhost:3000/distribution` prepara campanhas 
 - `POST /distribution/campaigns/:id/schedule`: agenda uma campanha aprovada.
 - `POST /distribution/campaigns/:id/execute`: executa o `dry_run` auditado.
 
-O modo `live` é recusado até existir um conector real do canal e autorização explícita.
+O modo `live` só é oferecido para Instagram ou TikTok quando o conector oficial, token OAuth e URL pública HTTPS estão configurados. A campanha exige conteúdo aprovado, mídia real, aprovação humana e agendamento; somente uma resposta externa com identificador de publicação permite marcar a entrega como concluída.
 
 ## Aprendizado contínuo v0.8
 

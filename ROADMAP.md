@@ -29,14 +29,14 @@ O Atlas OS existe para pesquisar oportunidades, escolher ofertas, executar marke
 
 Entregue com geração textual determinística e rastreável, aprovação humana e briefings/roteiros para mídia. Geração de imagens e vídeos finais, IA externa e publicação permanecem fora desta versão.
 
-## v0.7 — Distribuição Automática — CONCLUÍDA EM MODO SEGURO
+## v0.7 — Distribuição Automática — NÚCLEO CONCLUÍDO; ATIVAÇÃO EXTERNA PENDENTE
 
 - Social e Traffic Agents.
 - Publicação e agendamento multicanal com aprovação e permissões.
 - Integrações prioritárias: Instagram, TikTok, YouTube, Pinterest, WordPress, Meta Ads e Google Ads.
 - Rastreamento de campanhas, custos, conversões e atribuição.
 
-O núcleo de campanha, aprovação, agendamento, UTMs e execução auditada foi entregue em `dry_run`. Conectores e publicação real permanecem bloqueados até configuração de credenciais, políticas de cada canal e autorização explícita.
+O núcleo de campanha, aprovação, agendamento, UTMs e execução auditada foi entregue. Clientes oficiais de Instagram Graph API e TikTok Content Posting API foram implementados; publicação real permanece bloqueada no ambiente atual até configuração de token OAuth, URL pública HTTPS, domínio de mídia verificado e aprovação do aplicativo quando exigida pelo canal.
 
 ## v0.8 — Aprendizado Contínuo — CONCLUÍDA
 
@@ -56,13 +56,13 @@ O motor diferencia dados confirmados, calculados e simulados. Campanhas `dry_run
 
 Políticas, propostas, aprovação e simulação foram entregues. Execução financeira real permanece desativada; dados não confirmados e orçamento zero bloqueiam escala.
 
-## v1.0 — Empresa Autônoma — CONTROL PLANE CONCLUÍDO
+## v1.0 — Empresa Autônoma — CONTROL PLANE CONCLUÍDO; OPERAÇÃO COMERCIAL EM ATIVAÇÃO
 
 - Ciclo integrado: mercado → pesquisa → oportunidade → planejamento → execução → distribuição → medição → aprendizado → otimização → escala → lucro.
 - Coordenação entre agentes com metas comerciais, orçamento, permissões e auditoria.
 - Operação humana por exceção, com controles de segurança e aprovação para ações críticas.
 
-O Atlas COO coordena e avalia o ciclo completo, identifica gargalos e recomenda a próxima ação. A autonomia externa permanece bloqueada até existirem conectores reais, dados confirmados e orçamento autorizado.
+O Atlas COO coordena e avalia o ciclo completo, identifica gargalos e recomenda a próxima ação. A operação externa ainda não pode ser chamada de autônoma: depende da ativação dos tokens oficiais, mídia pública, dados confirmados e orçamento autorizado.
 
 ## v1.1 — Provider Anthropic Nativo — CONCLUÍDA
 

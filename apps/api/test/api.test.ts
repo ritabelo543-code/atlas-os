@@ -10,13 +10,14 @@ import { TaskRepository } from "../src/repositories/TaskRepository.js";
 import { ProjectService } from "../src/services/ProjectService.js";
 import { TaskService } from "../src/services/TaskService.js";
 import { AuthService, type StoredUser } from "../src/services/AuthService.js";
+import { OpenAIImageClient } from "../src/integrations/OpenAIImageClient.js";
 
 const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
 function memoryStore<T>(initial: T[] = []): JsonStore<T> {
   let values = structuredClone(initial);
   return { load: async () => structuredClone(values), save: async (next) => { values = structuredClone(next); } };
 }
-async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [], aiProvider: AiProvider = new MockAiProvider()) {
+async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [], aiProvider: AiProvider = new MockAiProvider(), imageClient?: OpenAIImageClient) {
   const projects = new ProjectService(new ProjectRepository(memoryStore<Project>(initialProjects)));
   const tasks = new TaskService(new TaskRepository(memoryStore<Task>(initialTasks)));
   const atlas = new AtlasCore(aiProvider, { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
@@ -25,7 +26,7 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions, aiProvider);
   const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions, aiProvider);
   const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions, aiProvider); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
-  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, logger: false });
+  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, imageClient, logger: false });
   apps.push(app);
   return app;
 }
@@ -257,4 +258,72 @@ test("validation and not-found errors are consistent", async () => {
   const missing = await app.inject({ method: "PATCH", url: "/tasks/missing", headers, payload: { completed: true } });
   assert.equal(missing.statusCode, 404);
   assert.equal(missing.json().error, "NOT_FOUND");
+});
+
+test("approved content can generate and serve a persisted real media asset", async () => {
+  const imageClient = new OpenAIImageClient("test-key", "gpt-image-1-mini");
+  imageClient.generate = async () => ({ bytes: Buffer.from("real-png-bytes"), model: "gpt-image-1-mini", mimeType: "image/png", requestId: "req-test" });
+  const app = await testApp([], [], new MockAiProvider(), imageClient);
+  const owner = await authHeaders(app, "media-owner@example.com");
+  const research = await app.inject({ method: "POST", url: "/market/research", headers: owner, payload: { query: "casa", market: "Afiliados", niche: "organização", audience: "adultos", painOrDesire: "organizar a casa", channels: ["instagram"], evidence: [{ source: "fixture", observedAt: new Date().toISOString(), excerpt: "teste", valueKind: "simulated", confidence: .8 }], offers: [{ name: "Oferta", provider: "fixture" }], metrics: { demand: 70, commercialIntent: 70, competition: 40, monetization: 70, margin: 60, effort: 30, risk: 20, evidenceQuality: 70, confidence: 70, scalability: 70 }, dataKind: "simulated" } });
+  const opportunityId = research.json().opportunities[0].id;
+  const plan = (await app.inject({ method: "POST", url: "/content/plans", headers: owner, payload: { opportunityId, objective: "Apresentar produto", funnelStage: "conversion", channels: ["instagram"], keywords: ["casa"], tone: "claro" } })).json<ContentPlan>();
+  const asset = (await app.inject({ method: "POST", url: "/content/assets", headers: owner, payload: { planId: plan.id, channel: "instagram", format: "social-post" } })).json<ContentAsset>();
+  assert.equal((await app.inject({ method: "POST", url: `/content/assets/${asset.id}/image`, headers: owner, payload: {} })).statusCode, 409);
+  await app.inject({ method: "PATCH", url: `/content/assets/${asset.id}/review`, headers: owner, payload: { status: "approved" } });
+  const generated = await app.inject({ method: "POST", url: `/content/assets/${asset.id}/image`, headers: owner, payload: { prompt: "Imagem comercial limpa" } });
+  assert.equal(generated.statusCode, 201);
+  assert.equal(generated.json().model, "gpt-image-1-mini");
+  const media = await app.inject({ method: "GET", url: `/media/${generated.json().id}` });
+  assert.equal(media.statusCode, 200);
+  assert.equal(media.body, "real-png-bytes");
+});
+
+test("Shopee tracking redirect records confirmed clicks without personal data", async () => {
+  const app = await testApp();
+  const owner = await authHeaders(app, "shopee-tracking@example.com");
+  const created = await app.inject({ method: "POST", url: "/integrations/shopee/links", headers: owner, payload: { name: "Organizador", category: "Casa", channel: "instagram", affiliateUrl: "https://shope.ee/example", subId: "atlas-test" } });
+  assert.equal(created.statusCode, 201);
+  const link = created.json();
+  const redirect = await app.inject({ method: "GET", url: `/r/shopee/${link.id}` });
+  assert.equal(redirect.statusCode, 302);
+  assert.equal(redirect.headers.location, "https://shope.ee/example");
+  const clicks = await app.inject({ method: "GET", url: "/integrations/shopee/clicks", headers: owner });
+  assert.equal(clicks.statusCode, 200);
+  assert.equal(clicks.json().length, 1);
+  assert.equal(clicks.json()[0].dataKind, "confirmed");
+  assert.equal(JSON.stringify(clicks.json()).includes("ip"), false);
+  await app.close();
+});
+
+test("Hotmart affiliate redirect records confirmed clicks when catalog API is empty", async () => {
+  const app = await testApp();
+  const owner = await authHeaders(app, "hotmart-link@example.com");
+  const created = await app.inject({ method: "POST", url: "/integrations/hotmart/links", headers: owner, payload: { name: "Produto Hotmart", affiliateUrl: "https://go.hotmart.com/V107180956B", subId: "atlas-test" } });
+  assert.equal(created.statusCode, 201);
+  const redirect = await app.inject({ method: "GET", url: `/r/hotmart/${created.json().id}` });
+  assert.equal(redirect.statusCode, 302);
+  assert.match(String(redirect.headers.location), /go\.hotmart\.com/);
+  const clicks = await app.inject({ method: "GET", url: "/integrations/hotmart/clicks", headers: owner });
+  assert.equal(clicks.json().length, 1); assert.equal(clicks.json()[0].dataKind, "confirmed");
+});
+
+test("readiness never reports legacy username/password social connectors as operational", async () => {
+  const previousInstagramToken = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const previousTikTokToken = process.env.TIKTOK_ACCESS_TOKEN;
+  delete process.env.INSTAGRAM_ACCESS_TOKEN;
+  delete process.env.TIKTOK_ACCESS_TOKEN;
+  try {
+    const app = await testApp();
+    const owner = await authHeaders(app, "readiness@example.com");
+    const response = await app.inject({ method: "GET", url: "/atlas/readiness", headers: owner });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().integrations.instagramPublishing.ready, false);
+    assert.equal(response.json().integrations.tiktokPublishing.ready, false);
+    assert.equal(response.json().readyForExternalPublishing, false);
+    await app.close();
+  } finally {
+    if (previousInstagramToken !== undefined) process.env.INSTAGRAM_ACCESS_TOKEN = previousInstagramToken;
+    if (previousTikTokToken !== undefined) process.env.TIKTOK_ACCESS_TOKEN = previousTikTokToken;
+  }
 });

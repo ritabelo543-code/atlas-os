@@ -17,6 +17,15 @@ export class HotmartClient {
 
   constructor(private readonly credentials: HotmartCredentials | null, readonly environment: HotmartEnvironment = "sandbox") {}
 
+  static fromEnvironment(environment: HotmartEnvironment = "sandbox"): HotmartClient {
+    const prefix = `HOTMART_${environment.toUpperCase()}_`;
+    const clientId = process.env[`${prefix}CLIENT_ID`] ?? (environment === "production" ? process.env.HOTMART_CLIENT_ID : undefined);
+    const clientSecret = process.env[`${prefix}CLIENT_SECRET`] ?? (environment === "production" ? process.env.HOTMART_CLIENT_SECRET : undefined);
+    const basic = process.env[`${prefix}BASIC`] ?? (environment === "production" ? process.env.HOTMART_BASIC : undefined);
+    if (!clientId || !clientSecret) return HotmartClient.fromLocalFile(environment);
+    return new HotmartClient({ clientId, clientSecret, basic: basic?.replace(/^Basic\s+/i, "") ?? Buffer.from(`${clientId}:${clientSecret}`).toString("base64") }, environment);
+  }
+
   static fromLocalFile(environment: HotmartEnvironment = "sandbox", path = process.env[`HOTMART_${environment.toUpperCase()}_CREDENTIALS_FILE`] ?? defaultCredentialPath(environment)): HotmartClient {
     if (!existsSync(path)) return new HotmartClient(null, environment);
     return new HotmartClient(parseHotmartCredentials(readFileSync(path, "utf8")), environment);
@@ -53,7 +62,7 @@ export class HotmartClient {
   }
 
   private async accessToken(fetcher: typeof fetch): Promise<string> {
-    if (!this.credentials) throw new Error("Hotmart sandbox credentials are not configured");
+    if (!this.credentials) throw new Error(`Hotmart ${this.environment} credentials are not configured`);
     const query = new URLSearchParams({ grant_type: "client_credentials", client_id: this.credentials.clientId, client_secret: this.credentials.clientSecret });
     const response = await fetcher(`https://api-sec-vlc.hotmart.com/security/oauth/token?${query}`, { method: "POST", headers: { Authorization: `Basic ${this.credentials.basic}`, "Content-Type": "application/json" } });
     if (!response.ok) throw new Error(`Hotmart authentication failed with status ${response.status}`);

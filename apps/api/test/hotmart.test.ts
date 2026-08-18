@@ -7,6 +7,26 @@ test("parses the downloaded Hotmart credential format without exposing values", 
   assert.deepEqual(credentials, { clientId: "client", clientSecret: "secret", basic: "encoded" });
 });
 
+test("loads production credentials from environment and derives Basic safely", async () => {
+  const previousId = process.env.HOTMART_CLIENT_ID;
+  const previousSecret = process.env.HOTMART_CLIENT_SECRET;
+  try {
+    process.env.HOTMART_CLIENT_ID = "client";
+    process.env.HOTMART_CLIENT_SECRET = "secret";
+    const client = HotmartClient.fromEnvironment("production");
+    assert.equal(client.status().configured, true);
+    const calls: Array<{ url: string; authorization: string | null }> = [];
+    await client.verifyAuthentication(async (input, init) => {
+      calls.push({ url: String(input), authorization: new Headers(init?.headers).get("Authorization") });
+      return new Response(JSON.stringify({ access_token: "temporary" }), { status: 200 });
+    });
+    assert.equal(calls[0]?.authorization, `Basic ${Buffer.from("client:secret").toString("base64")}`);
+  } finally {
+    if (previousId === undefined) delete process.env.HOTMART_CLIENT_ID; else process.env.HOTMART_CLIENT_ID = previousId;
+    if (previousSecret === undefined) delete process.env.HOTMART_CLIENT_SECRET; else process.env.HOTMART_CLIENT_SECRET = previousSecret;
+  }
+});
+
 test("reports safe sandbox status and verifies authentication without retaining the token", async () => {
   const client = new HotmartClient({ clientId: "client", clientSecret: "secret", basic: "encoded" });
   assert.deepEqual(client.status(), { configured: true, environment: "sandbox", authenticated: false });

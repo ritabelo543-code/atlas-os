@@ -1,0 +1,14 @@
+.git
+.turbo
+**/.next
+**/dist
+**/test-dist
+node_modules
+.env
+.env.*
+!.env.example
+apps/api/data
+work
+*.log
+*.patch
+env-local-completo.txt

@@ -1,5 +1,6 @@
 export type ShopeeChannel = "instagram" | "tiktok" | "pinterest";
 export type ShopeeAffiliateLink = { id: string; ownerId: string; name: string; category: string; channel: ShopeeChannel; affiliateUrl: string; subId: string; status: "active"; dataKind: "confirmed"; source: "shopee-affiliate"; createdAt: string };
+export type ShopeeClick = { id: string; linkId: string; ownerId: string; channel: ShopeeChannel; subId: string; occurredAt: string; dataKind: "confirmed"; source: "atlas-redirect" };
 
 export function validateShopeeAffiliateUrl(value: string): string {
   let url: URL;

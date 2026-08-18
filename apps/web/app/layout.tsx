@@ -9,8 +9,8 @@ import "./shortcut.css";
 import "./integrations/integrations.css";
 
 export const metadata: Metadata = {
-  title: "Atlas OS",
-  description: "Pesquisa de mercado, oportunidades e conteúdo comercial automatizado.",
+  title: "Radar de Escolhas",
+  description: "Pesquisa de oportunidades, curadoria de produtos e conteúdo comercial responsável.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

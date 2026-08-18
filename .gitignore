@@ -17,6 +17,8 @@ apps/api/data/*.bak
 .env
 .env.*
 !.env.example
+!.env.production.example
+env-local-completo.txt
 .secrets/
 **/.secrets/
 
@@ -37,3 +39,5 @@ apps/api/data/*.db-wal
 apps/api/data/*.db.secret
 apps/api/src.zip
 work/
+ATLAS_AUTOMATION_*.txt
+apps/api/ATLAS_AUTOMATION_*.txt

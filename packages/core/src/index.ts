@@ -1,9 +1,16 @@
 import type { AtlasStatus, AuditEntry, ContentChannel, ContentFormat, ContentPlan, ContentVariant, Decision, KnowledgeItem, MarketEvidence, MarketOpportunity, MarketSignal, MemoryItem, Mission, PerformanceRecord } from "@atlas/types";
 import { MemoryManager } from "./v02.js";
 import { AgentRuntime, PermissionManager } from "./v03.js";
-import { AiProviderError } from "./providers/anthropic.js";
+
+export class AiProviderError extends Error {
+  constructor(message: string, readonly providerStatus?: number) {
+    super(message);
+    this.name = "AiProviderError";
+  }
+}
+
 export { AgentRegistry, MemoryManager, PluginRegistry, resolveAiProvider } from "./v02.js";
-export { AiProviderError, AnthropicAiProvider } from "./providers/anthropic.js";
+export { AnthropicAiProvider } from "./providers/anthropic.js";
 export { AgentRuntime, GitHubPlugin, PermissionManager, PluginRuntime } from "./v03.js";
 export { MarketIntelligence, scoreOpportunity, type MarketStores } from "./market.js";
 export { ContentStudio, type ContentStores } from "./content.js";

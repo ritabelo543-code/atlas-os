@@ -2,8 +2,9 @@ import type { ContentAsset, ContentFormat, ContentPlan, ContentVariant, CreateCo
 import type { AiProvider, CollectionStore, Guardian } from "./index.js";
 import { AgentRuntime, PermissionManager } from "./v03.js";
 
+const AFFILIATE_DISCLOSURE = "Transparência: este conteúdo contém links de afiliado. O Atlas pode receber comissão sem custo adicional para você; condições e resultados variam.";
+
 export type ContentStores = { plans: CollectionStore<ContentPlan>; assets: CollectionStore<ContentAsset> };
-const AFFILIATE_DISCLOSURE = "Transparência: este conteúdo pode conter uma recomendação de afiliado; condições e resultados variam.";
 
 export class ContentStudio {
   constructor(private readonly stores: ContentStores, private readonly opportunities: CollectionStore<MarketOpportunity>, private readonly guardian: Guardian, private readonly runtime: AgentRuntime, private readonly permissions: PermissionManager, private readonly aiProvider?: AiProvider) {

@@ -1,7 +1,10 @@
+// Carregar variáveis de ambiente (DEVE ser a primeira importação!)
+import "./dotenv-loader.js";
+
 import { buildApp } from "./app.js";
 
 const app = await buildApp();
-const port = Number(process.env.PORT ?? 3333);
+const port = Number(process.env.PORT ?? process.env.API_PORT ?? 3333);
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, "shutting down");
