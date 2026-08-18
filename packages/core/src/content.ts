@@ -2,7 +2,7 @@ import type { ContentAsset, ContentFormat, ContentPlan, ContentVariant, CreateCo
 import type { AiProvider, CollectionStore, Guardian } from "./index.js";
 import { AgentRuntime, PermissionManager } from "./v03.js";
 
-const AFFILIATE_DISCLOSURE = "Transparência: este conteúdo contém links de afiliado. O Atlas pode receber comissão sem custo adicional para você; condições e resultados variam.";
+const AFFILIATE_DISCLOSURE = "Transparência: este conteúdo contém links de afiliado. O Radar de Escolhas pode receber comissão sem custo adicional para você; condições e resultados variam.";
 
 export type ContentStores = { plans: CollectionStore<ContentPlan>; assets: CollectionStore<ContentAsset> };
 
