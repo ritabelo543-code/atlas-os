@@ -17,7 +17,7 @@ function memoryStore<T>(initial: T[] = []): JsonStore<T> {
   let values = structuredClone(initial);
   return { load: async () => structuredClone(values), save: async (next) => { values = structuredClone(next); } };
 }
-async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [], aiProvider: AiProvider = new MockAiProvider(), imageClient?: OpenAIImageClient, trackingBaseUrl = "") {
+async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [], aiProvider: AiProvider = new MockAiProvider(), imageClient?: OpenAIImageClient, trackingBaseUrl = "", registrationPolicy?: { adminEmail?: string; enabledAfterAdmin?: boolean }) {
   const projects = new ProjectService(new ProjectRepository(memoryStore<Project>(initialProjects)));
   const tasks = new TaskService(new TaskRepository(memoryStore<Task>(initialTasks)));
   const atlas = new AtlasCore(aiProvider, { missions: memoryStore<Mission>(), decisions: memoryStore<Decision>(), knowledge: memoryStore<KnowledgeItem>(), audit: memoryStore<AuditEntry>(), memory: memoryStore<MemoryItem>() });
@@ -26,7 +26,7 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions, aiProvider);
   const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions, aiProvider);
   const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions, [], trackingBaseUrl); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions, aiProvider); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
-  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, imageClient, logger: false });
+  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, imageClient, registrationPolicy, logger: false });
   apps.push(app);
   return app;
 }
@@ -258,6 +258,15 @@ test("validation and not-found errors are consistent", async () => {
   const missing = await app.inject({ method: "PATCH", url: "/tasks/missing", headers, payload: { completed: true } });
   assert.equal(missing.statusCode, 404);
   assert.equal(missing.json().error, "NOT_FOUND");
+});
+
+test("production registration policy reserves the first admin and closes public signups", async () => {
+  const app = await testApp([], [], new MockAiProvider(), undefined, "", { adminEmail: "owner@example.com", enabledAfterAdmin: false });
+  assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: true, awaitingAdmin: true, restrictedToAdminEmail: true });
+  assert.equal((await app.inject({ method: "POST", url: "/auth/register", payload: { email: "intruder@example.com", password: "secure-password", name: "Intruder" } })).statusCode, 403);
+  assert.equal((await app.inject({ method: "POST", url: "/auth/register", payload: { email: "OWNER@example.com", password: "secure-password", name: "Owner" } })).statusCode, 201);
+  assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: false, awaitingAdmin: false, restrictedToAdminEmail: false });
+  assert.equal((await app.inject({ method: "POST", url: "/auth/register", payload: { email: "member@example.com", password: "secure-password", name: "Member" } })).statusCode, 403);
 });
 
 test("approved content can generate and serve a persisted real media asset", async () => {

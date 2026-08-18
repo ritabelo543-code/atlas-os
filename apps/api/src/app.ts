@@ -29,7 +29,7 @@ const taskBody = { type: "object", additionalProperties: false, required: ["titl
 const taskPatch = { type: "object", additionalProperties: false, minProperties: 1, properties: { ...taskBody.properties, completed: { type: "boolean" } } } as const;
 const missionBody = { type: "object", additionalProperties: false, required: ["title", "objective"], properties: { title: { type: "string", minLength: 1, maxLength: 160, pattern: "\\S" }, objective: { type: "string", minLength: 10, maxLength: 2000, pattern: "\\S" }, context: { type: "string", maxLength: 5000 } } } as const;
 
-export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; content?: ContentStudio; distribution?: DistributionCenter; learning?: LearningEngine; scale?: ScaleEngine; company?: CompanyOrchestrator; hotmartSandbox?: HotmartClient; hotmartProduction?: HotmartClient; imageClient?: OpenAIImageClient; logger?: boolean };
+export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; content?: ContentStudio; distribution?: DistributionCenter; learning?: LearningEngine; scale?: ScaleEngine; company?: CompanyOrchestrator; hotmartSandbox?: HotmartClient; hotmartProduction?: HotmartClient; imageClient?: OpenAIImageClient; registrationPolicy?: { adminEmail?: string; enabledAfterAdmin?: boolean }; logger?: boolean };
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: dependencies.logger ?? true, bodyLimit: 64 * 1024 });
@@ -42,6 +42,10 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const projects = dependencies.projects ?? new ProjectService(new ProjectRepository(projectStore!));
   const tasks = dependencies.tasks ?? new TaskService(new TaskRepository(taskStore!));
   const auth = dependencies.auth ?? new AuthService(createSqliteStore<StoredUser>(database, "users"), authSecret(database));
+  const registrationPolicy = dependencies.registrationPolicy ?? (dependencies.auth ? { enabledAfterAdmin: true } : {
+    adminEmail: process.env.ATLAS_ADMIN_EMAIL?.trim().toLowerCase(),
+    enabledAfterAdmin: process.env.ATLAS_REGISTRATION_ENABLED === "true"
+  });
   const opportunityStore = createSqliteStore<MarketOpportunity>(database, "market_opportunities");
   const market = dependencies.market ?? new MarketIntelligence({ research: createSqliteStore<MarketResearch>(database, "market_research"), evidence: createSqliteStore<MarketEvidence & { ownerId: string; researchId: string }>(database, "market_evidence"), signals: createSqliteStore<MarketSignal>(database, "market_signals"), offers: createSqliteStore<AffiliateOffer>(database, "market_offers"), opportunities: opportunityStore }, atlas.guardian, atlas.agentRuntime, atlas.permissions, atlas.provider);
   const contentAssetStore = createSqliteStore<ContentAsset>(database, "content_assets");
@@ -111,7 +115,17 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     }
   });
 
-  app.post<{ Body: { email: string; password: string; name: string } }>("/auth/register", async (request, reply) => { try { const session = await auth.register(request.body.email, request.body.password, request.body.name); if (session.user.role === "admin") await Promise.all([projects.claimUnowned(session.user.id), tasks.claimUnowned(session.user.id)]); return reply.code(201).send(session); } catch (error) { return reply.code(400).send({ error: "AUTH_ERROR", message: error instanceof Error ? error.message : "Registration failed", statusCode: 400 }); } });
+  app.get("/auth/registration-status", async () => {
+    const admin = await auth.firstAdmin();
+    return { registrationOpen: admin ? registrationPolicy.enabledAfterAdmin === true : true, awaitingAdmin: !admin, restrictedToAdminEmail: !admin && Boolean(registrationPolicy.adminEmail) };
+  });
+  app.post<{ Body: { email: string; password: string; name: string } }>("/auth/register", async (request, reply) => {
+    const admin = await auth.firstAdmin();
+    const normalizedEmail = request.body.email?.trim().toLowerCase();
+    if (!admin && registrationPolicy.adminEmail && normalizedEmail !== registrationPolicy.adminEmail) return reply.code(403).send({ error: "REGISTRATION_RESTRICTED", message: "Initial registration is reserved for the configured administrator.", statusCode: 403 });
+    if (admin && registrationPolicy.enabledAfterAdmin !== true) return reply.code(403).send({ error: "REGISTRATION_CLOSED", message: "Public registration is closed.", statusCode: 403 });
+    try { const session = await auth.register(request.body.email, request.body.password, request.body.name); if (session.user.role === "admin") await Promise.all([projects.claimUnowned(session.user.id), tasks.claimUnowned(session.user.id)]); return reply.code(201).send(session); } catch (error) { return reply.code(400).send({ error: "AUTH_ERROR", message: error instanceof Error ? error.message : "Registration failed", statusCode: 400 }); }
+  });
   app.post<{ Body: { email: string; password: string } }>("/auth/login", async (request, reply) => { try { return await auth.login(request.body.email, request.body.password); } catch { return reply.code(401).send({ error: "UNAUTHORIZED", message: "Invalid credentials", statusCode: 401 }); } });
   app.get("/auth/me", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ?? reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
 
