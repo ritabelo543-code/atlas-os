@@ -1,6 +1,6 @@
-# Atlas OS
+# Radar de Escolhas (Atlas OS)
 
-Atlas OS é o sistema operacional de uma empresa digital automatizada. Ele pesquisa oportunidades, escolhe produtos e estratégias, coordena execução, marketing e conteúdo, mede resultados, aprende com desempenho e escala iniciativas lucrativas.
+Radar de Escolhas é o nome público da plataforma; Atlas OS permanece como nome técnico interno. O sistema opera uma empresa digital automatizada: pesquisa oportunidades, escolhe produtos e estratégias, coordena execução, marketing e conteúdo, mede resultados, aprende com desempenho e escala iniciativas lucrativas.
 
 ## Estado operacional verificado
 
