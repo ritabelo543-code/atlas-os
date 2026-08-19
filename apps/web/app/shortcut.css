@@ -5,4 +5,5 @@
 .company-shortcut{position:fixed;right:455px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:#742f3e;color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #742f3e33}
 .integration-shortcut{position:fixed;right:572px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:#075985;color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #07598533}
 .shopee-shortcut{position:fixed;right:667px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:#9a3412;color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #9a341233}
-@media(max-width:900px){.content-shortcut,.distribution-shortcut,.learning-shortcut,.scale-shortcut,.company-shortcut,.integration-shortcut,.shopee-shortcut{display:none}}
+.tiktok-shortcut{position:fixed;right:758px;bottom:18px;z-index:20;padding:10px 14px;border-radius:99px;background:#111827;color:#fff;text-decoration:none;font-size:12px;font-weight:700;box-shadow:0 8px 25px #11182733}
+@media(max-width:1000px){.content-shortcut,.distribution-shortcut,.learning-shortcut,.scale-shortcut,.company-shortcut,.integration-shortcut,.shopee-shortcut,.tiktok-shortcut{display:none}}

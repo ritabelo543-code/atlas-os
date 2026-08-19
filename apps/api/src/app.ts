@@ -19,6 +19,7 @@ import { createShopeeLink, type ShopeeAffiliateLink, type ShopeeChannel, type Sh
 import { OpenAIImageClient } from "./integrations/OpenAIImageClient.js";
 import { InstagramGraphClient } from "./integrations/InstagramGraphClient.js";
 import { TikTokContentClient } from "./integrations/TikTokContentClient.js";
+import { TikTokOAuthService, type StoredTikTokToken, type TikTokOAuthState } from "./integrations/TikTokOAuthService.js";
 import { createHotmartLink, type HotmartAffiliateLink, type HotmartClick } from "./integrations/HotmartLinks.js";
 
 const idParams = { type: "object", additionalProperties: false, required: ["id"], properties: { id: { type: "string", minLength: 1, maxLength: 100 } } } as const;
@@ -41,7 +42,8 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   if (taskStore) await migrateJsonIntoEmptyStore(taskStore, join(dirname(database), "tasks.json"));
   const projects = dependencies.projects ?? new ProjectService(new ProjectRepository(projectStore!));
   const tasks = dependencies.tasks ?? new TaskService(new TaskRepository(taskStore!));
-  const auth = dependencies.auth ?? new AuthService(createSqliteStore<StoredUser>(database, "users"), authSecret(database));
+  const applicationSecret = authSecret(database);
+  const auth = dependencies.auth ?? new AuthService(createSqliteStore<StoredUser>(database, "users"), applicationSecret);
   const registrationPolicy = dependencies.registrationPolicy ?? (dependencies.auth ? { enabledAfterAdmin: true } : {
     adminEmail: process.env.ATLAS_ADMIN_EMAIL?.trim().toLowerCase(),
     enabledAfterAdmin: process.env.ATLAS_REGISTRATION_ENABLED === "true"
@@ -56,7 +58,10 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const publicBaseUrl = process.env.ATLAS_PUBLIC_URL?.replace(/\/$/, "") ?? "http://localhost:3333";
   const publicMediaReady = publicBaseUrl.startsWith("https://");
   const tiktokUrlOwnershipVerified = process.env.TIKTOK_URL_OWNERSHIP_VERIFIED === "true";
-  const liveChannels = [...(instagram.status().configured && publicMediaReady ? ["instagram"] : []), ...(tiktok.status().configured && publicMediaReady && tiktokUrlOwnershipVerified ? ["tiktok"] : [])];
+  const tiktokOAuthStates = createSqliteStore<TikTokOAuthState>(database, "tiktok_oauth_states");
+  const tiktokOAuthTokens = createSqliteStore<StoredTikTokToken>(database, "tiktok_oauth_tokens");
+  const tiktokOAuth = new TikTokOAuthService(tiktokOAuthStates, tiktokOAuthTokens, process.env.TIKTOK_CLIENT_KEY, process.env.TIKTOK_CLIENT_SECRET, process.env.TIKTOK_REDIRECT_URI ?? `${publicBaseUrl}/integrations/tiktok/callback`, applicationSecret);
+  const liveChannels = [...(instagram.status().configured && publicMediaReady ? ["instagram"] : []), ...((tiktok.status().configured || tiktokOAuth.configured()) && publicMediaReady && tiktokUrlOwnershipVerified ? ["tiktok"] : [])];
   const distribution = dependencies.distribution ?? new DistributionCenter(campaignStore, contentAssetStore, atlas.guardian, atlas.agentRuntime, atlas.permissions, liveChannels, publicMediaReady ? publicBaseUrl : "");
   const performanceStore = createSqliteStore<PerformanceRecord>(database, "performance_records"); const insightStore = createSqliteStore<LearningInsight>(database, "learning_insights");
   const learning = dependencies.learning ?? new LearningEngine(performanceStore, insightStore, campaignStore, atlas.guardian, atlas.agentRuntime, atlas.permissions, atlas.provider);
@@ -90,7 +95,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   await plugins.load("github");
   await atlas.start();
 
-  app.addHook("onClose", async () => { campaignClicks.close?.(); hotmartClicks.close?.(); hotmartLinks.close?.(); mediaAssets.close?.(); shopeeClicks.close?.(); shopeeLinks.close?.(); hotmartProducts.close?.(); hotmartOffers.close?.(); hotmartSales.close?.(); company.close(); scale.close(); learning.close(); distribution.close(); content.close(); market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
+  app.addHook("onClose", async () => { tiktokOAuthStates.close?.(); tiktokOAuthTokens.close?.(); campaignClicks.close?.(); hotmartClicks.close?.(); hotmartLinks.close?.(); mediaAssets.close?.(); shopeeClicks.close?.(); shopeeLinks.close?.(); hotmartProducts.close?.(); hotmartOffers.close?.(); hotmartSales.close?.(); company.close(); scale.close(); learning.close(); distribution.close(); content.close(); market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
   const allowedOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
   await app.register(cors, { origin: allowedOrigin, methods: ["GET", "POST", "PATCH", "DELETE"] });
 
@@ -119,7 +124,14 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>("/integrations/tiktok/callback", async (request, reply) => {
     if (request.query.error) return reply.code(400).send({ status: "authorization_denied", provider: "tiktok", message: request.query.error_description ?? "TikTok authorization was not completed." });
     if (!request.query.code || !request.query.state) return reply.code(400).send({ status: "ready", provider: "tiktok", message: "TikTok OAuth callback is active. Start authorization from Radar de Escolhas." });
-    return reply.code(501).send({ status: "token_exchange_pending", provider: "tiktok", message: "TikTok returned authorization successfully. Secure token exchange is not configured yet." });
+    try {
+      await tiktokOAuth.complete(request.query.code, request.query.state);
+      const webUrl = (process.env.CORS_ORIGIN ?? "http://localhost:3000").replace(/\/$/, "");
+      return reply.redirect(`${webUrl}/integrations?tiktok=connected`);
+    } catch (error) {
+      request.log.error({ err: error }, "TikTok OAuth callback failed");
+      return reply.code(400).send({ status: "authorization_failed", provider: "tiktok", message: error instanceof Error ? error.message : "TikTok authorization failed" });
+    }
   });
   app.get("/integrations/tiktok/callback/tiktokZUTUUz5GNXVqHqCqbSQSroyxHl9mBXoK.txt", async (_request, reply) => {
     return reply.type("text/plain; charset=utf-8").send("tiktok-developers-site-verification=ZUTUUz5GNXVqHqCqbSQSroyxHl9mBXoK");
@@ -147,6 +159,17 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     try { return await auth.recoverAdmin(configuredEmail, request.body.password); } catch (error) { return reply.code(400).send({ error: "RECOVERY_ERROR", message: error instanceof Error ? error.message : "Recovery failed", statusCode: 400 }); }
   });
   app.get("/auth/me", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ?? reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+
+  app.post("/integrations/tiktok/connect", async (request, reply) => {
+    const user = authenticate(request.headers.authorization);
+    if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 });
+    try { return await tiktokOAuth.begin(user.id); }
+    catch (error) { return reply.code(503).send({ error: "TIKTOK_OAUTH_UNAVAILABLE", message: error instanceof Error ? error.message : "TikTok OAuth is unavailable", statusCode: 503 }); }
+  });
+  app.get("/integrations/tiktok/status", async (request, reply) => {
+    const user = authenticate(request.headers.authorization);
+    return user ? tiktokOAuth.status(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 });
+  });
 
   app.get("/atlas/status", async () => atlas.status());
   app.get("/atlas/operation", async (request, reply) => {
@@ -179,12 +202,14 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     const links = (await shopeeLinks.load()).filter((item) => item.ownerId === user.id);
     const clicks = (await shopeeClicks.load()).filter((item) => item.ownerId === user.id);
     const ai = atlas.status().ai;
+    const tiktokConnection = await tiktokOAuth.status(user.id);
+    const tiktokConnected = tiktok.status().configured || tiktokConnection.connected;
     const integrations = {
       ai: { ready: ai.mode === "live", state: ai.mode === "live" ? "operational" : "mock", provider: ai.provider, model: ai.model },
       hotmartProduction: { ready: hotmartProduction.status().configured, state: hotmartProduction.status().authenticated ? "operational" : hotmartProduction.status().configured ? "configured-unverified" : "missing-credentials" },
       shopeeTracking: { ready: links.length > 0, state: links.length ? "operational" : "missing-affiliate-link", links: links.length, confirmedClicks: clicks.length },
       instagramPublishing: { ready: instagram.status().configured && publicMediaReady, state: !instagram.status().configured ? "missing-official-access-token" : !publicMediaReady ? "missing-public-https-url" : "configured-unverified" },
-      tiktokPublishing: { ready: tiktok.status().configured && publicMediaReady && tiktokUrlOwnershipVerified, state: !tiktok.status().configured ? "missing-official-access-token" : !publicMediaReady ? "missing-public-https-url" : !tiktokUrlOwnershipVerified ? "missing-url-ownership-verification" : "configured-unverified" },
+      tiktokPublishing: { ready: tiktokConnected && publicMediaReady && tiktokUrlOwnershipVerified, state: !tiktokOAuth.configured() && !tiktok.status().configured ? "missing-oauth-credentials" : !tiktokConnected ? "account-authorization-required" : !publicMediaReady ? "missing-public-https-url" : !tiktokUrlOwnershipVerified ? "missing-url-ownership-verification" : "configured-unverified" },
       imageGeneration: { ready: imageClient.status().configured, state: imageClient.status().configured ? "configured-unverified" : "missing-openai-api-key", model: imageClient.status().model },
     };
     return { readyForExternalPublishing: integrations.instagramPublishing.ready || integrations.tiktokPublishing.ready, integrations };
@@ -228,7 +253,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get<{ Params: { id: string } }>("/distribution/campaigns/:id", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); return (await distribution.get(request.params.id, user.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Distribution campaign not found", statusCode: 404 }); });
   app.post<{ Params: { id: string } }>("/distribution/campaigns/:id/approve", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { return (await distribution.approve(user.id, request.params.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Distribution campaign not found", statusCode: 404 }); } catch (error) { return reply.code(409).send({ error: "INVALID_STATE", message: error instanceof Error ? error.message : "Approval failed", statusCode: 409 }); } });
   app.post<{ Params: { id: string } }>("/distribution/campaigns/:id/schedule", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { return (await distribution.schedule(user.id, request.params.id)) ?? reply.code(404).send({ error: "NOT_FOUND", message: "Distribution campaign not found", statusCode: 404 }); } catch (error) { return reply.code(409).send({ error: "INVALID_STATE", message: error instanceof Error ? error.message : "Scheduling failed", statusCode: 409 }); } });
-  app.post<{ Params: { id: string } }>("/distribution/campaigns/:id/execute", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { const campaign = await distribution.get(request.params.id, user.id); if (!campaign) return reply.code(404).send({ error: "NOT_FOUND", message: "Distribution campaign not found", statusCode: 404 }); if (campaign.mode === "dry_run") return await distribution.execute(user.id, campaign.id); const media = (await mediaAssets.load()).find((item) => item.ownerId === user.id && item.contentAssetId === campaign.assetId && item.kind === "image"); if (!media) return reply.code(409).send({ error: "MEDIA_REQUIRED", message: "Generate an approved image before live publication", statusCode: 409 }); const mediaUrl = `${publicBaseUrl}/media/${media.id}`; return await distribution.executeLive(user.id, campaign.id, async (_item, asset) => { const caption = `${asset.body}\n\n${asset.cta}\n${campaign.trackingUrl}`; if (campaign.channel === "instagram") { const result = await instagram.publishImage(mediaUrl, caption); return { externalId: result.externalId, detail: "Published by Instagram Graph API" }; } if (campaign.channel === "tiktok") { const result = await tiktok.publishPhoto([mediaUrl], asset.title.slice(0, 90), caption.slice(0, 2200), process.env.TIKTOK_PRIVACY_LEVEL ?? "SELF_ONLY"); return { externalId: result.externalId, detail: "Published by TikTok Content Posting API" }; } throw new Error(`No official live connector for ${campaign.channel}`); }); } catch (error) { return reply.code(409).send({ error: "LIVE_PUBLICATION_ERROR", message: error instanceof Error ? error.message : "Execution failed", statusCode: 409 }); } });
+  app.post<{ Params: { id: string } }>("/distribution/campaigns/:id/execute", { schema: { params: idParams } }, async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { const campaign = await distribution.get(request.params.id, user.id); if (!campaign) return reply.code(404).send({ error: "NOT_FOUND", message: "Distribution campaign not found", statusCode: 404 }); if (campaign.mode === "dry_run") return await distribution.execute(user.id, campaign.id); const media = (await mediaAssets.load()).find((item) => item.ownerId === user.id && item.contentAssetId === campaign.assetId && item.kind === "image"); if (!media) return reply.code(409).send({ error: "MEDIA_REQUIRED", message: "Generate an approved image before live publication", statusCode: 409 }); const mediaUrl = `${publicBaseUrl}/media/${media.id}`; return await distribution.executeLive(user.id, campaign.id, async (_item, asset) => { const caption = `${asset.body}\n\n${asset.cta}\n${campaign.trackingUrl}`; if (campaign.channel === "instagram") { const result = await instagram.publishImage(mediaUrl, caption); return { externalId: result.externalId, detail: "Published by Instagram Graph API" }; } if (campaign.channel === "tiktok") { const client = tiktok.status().configured ? tiktok : new TikTokContentClient(await tiktokOAuth.accessToken(user.id)); const result = await client.publishPhoto([mediaUrl], asset.title.slice(0, 90), caption.slice(0, 2200), process.env.TIKTOK_PRIVACY_LEVEL ?? "SELF_ONLY"); return { externalId: result.externalId, detail: "Published by TikTok Content Posting API" }; } throw new Error(`No official live connector for ${campaign.channel}`); }); } catch (error) { return reply.code(409).send({ error: "LIVE_PUBLICATION_ERROR", message: error instanceof Error ? error.message : "Execution failed", statusCode: 409 }); } });
   app.post<{ Body: CreatePerformanceInput }>("/learning/performance", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); const body = request.body; if (!body?.campaignId || !body.metrics || !body.dataKind || !body.source?.trim() || !body.observedAt) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Campaign, metrics, data kind, source and observation date are required", statusCode: 400 }); try { return reply.code(201).send(await learning.record(user.id, body)); } catch (error) { return reply.code(400).send({ error: "METRICS_ERROR", message: error instanceof Error ? error.message : "Metrics registration failed", statusCode: 400 }); } });
   app.get("/learning/performance", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? learning.listRecords(user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
   app.post<{ Params: { opportunityId: string } }>("/learning/opportunities/:opportunityId/analyze", async (request, reply) => { const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); try { return await learning.learn(user.id, request.params.opportunityId); } catch (error) { if (error instanceof AiProviderError) throw error; return reply.code(400).send({ error: "LEARNING_ERROR", message: error instanceof Error ? error.message : "Learning failed", statusCode: 400 }); } });

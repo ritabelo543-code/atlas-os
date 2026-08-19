@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { InstagramGraphClient } from "../src/integrations/InstagramGraphClient.js";
 import { TikTokContentClient } from "../src/integrations/TikTokContentClient.js";
+import { TikTokOAuthService } from "../src/integrations/TikTokOAuthService.js";
+
+function memoryStore<T>() {
+  let items: T[] = [];
+  return { async load() { return items; }, async save(next: T[]) { items = structuredClone(next); }, close() {}, inspect() { return items; } };
+}
 
 test("Instagram official connector creates, verifies and publishes a media container", async () => {
   const client = new InstagramGraphClient("account", "token", "v23.0");
@@ -41,4 +47,19 @@ test("TikTok official connector queries creator before direct photo publishing",
 test("official social connectors fail explicitly without OAuth tokens", async () => {
   await assert.rejects(() => new InstagramGraphClient("", "").verify(), /INSTAGRAM_ACCESS_TOKEN/);
   await assert.rejects(() => new TikTokContentClient("").creatorInfo(), /TIKTOK_ACCESS_TOKEN/);
+});
+
+test("TikTok OAuth validates state, encrypts tokens and exposes only safe connection metadata", async () => {
+  const states = memoryStore<{ state: string; ownerId: string; expiresAt: string }>();
+  const tokens = memoryStore<any>();
+  const oauth = new TikTokOAuthService(states, tokens, "client-key", "client-secret", "https://radar.example/callback", "encryption-secret");
+  const started = await oauth.begin("owner-1");
+  const state = new URL(started.authorizationUrl).searchParams.get("state")!;
+  const connected = await oauth.complete("authorization-code", state, async () => new Response(JSON.stringify({ access_token: "access-secret", refresh_token: "refresh-secret", open_id: "creator-1", scope: "user.info.basic,video.upload,video.publish", token_type: "Bearer", expires_in: 3600, refresh_expires_in: 31536000 }), { status: 200 }));
+  assert.equal(connected.connected, true);
+  assert.equal(connected.openId, "creator-1");
+  assert.equal(JSON.stringify(tokens.inspect()).includes("access-secret"), false);
+  assert.equal(JSON.stringify(tokens.inspect()).includes("refresh-secret"), false);
+  assert.equal(await oauth.accessToken("owner-1"), "access-secret");
+  await assert.rejects(() => oauth.complete("reused-code", state), /invalid or expired/);
 });
