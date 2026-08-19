@@ -116,6 +116,12 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     }
   });
 
+  app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>("/integrations/tiktok/callback", async (request, reply) => {
+    if (request.query.error) return reply.code(400).send({ status: "authorization_denied", provider: "tiktok", message: request.query.error_description ?? "TikTok authorization was not completed." });
+    if (!request.query.code || !request.query.state) return reply.code(400).send({ status: "ready", provider: "tiktok", message: "TikTok OAuth callback is active. Start authorization from Radar de Escolhas." });
+    return reply.code(501).send({ status: "token_exchange_pending", provider: "tiktok", message: "TikTok returned authorization successfully. Secure token exchange is not configured yet." });
+  });
+
   app.get("/auth/registration-status", async () => {
     const admin = await auth.firstAdmin();
     return { registrationOpen: admin ? registrationPolicy.enabledAfterAdmin === true : true, awaitingAdmin: !admin, restrictedToAdminEmail: !admin && Boolean(registrationPolicy.adminEmail), recoveryAvailable: Boolean(admin && registrationPolicy.adminEmail && process.env.ATLAS_ADMIN_RECOVERY_TOKEN) };

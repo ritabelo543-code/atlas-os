@@ -260,6 +260,12 @@ test("validation and not-found errors are consistent", async () => {
   assert.equal(missing.json().error, "NOT_FOUND");
 });
 
+test("TikTok OAuth callback is publicly reachable without exposing credentials", async () => {
+  const response = await (await testApp()).inject({ method: "GET", url: "/integrations/tiktok/callback" });
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.json(), { status: "ready", provider: "tiktok", message: "TikTok OAuth callback is active. Start authorization from Radar de Escolhas." });
+});
+
 test("production registration policy reserves the first admin and closes public signups", async () => {
   const app = await testApp([], [], new MockAiProvider(), undefined, "", { adminEmail: "owner@example.com", enabledAfterAdmin: false });
   assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: true, awaitingAdmin: true, restrictedToAdminEmail: true, recoveryAvailable: false });
