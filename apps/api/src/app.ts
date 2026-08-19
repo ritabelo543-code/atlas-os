@@ -55,7 +55,8 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const tiktok = new TikTokContentClient();
   const publicBaseUrl = process.env.ATLAS_PUBLIC_URL?.replace(/\/$/, "") ?? "http://localhost:3333";
   const publicMediaReady = publicBaseUrl.startsWith("https://");
-  const liveChannels = [...(instagram.status().configured && publicMediaReady ? ["instagram"] : []), ...(tiktok.status().configured && publicMediaReady ? ["tiktok"] : [])];
+  const tiktokUrlOwnershipVerified = process.env.TIKTOK_URL_OWNERSHIP_VERIFIED === "true";
+  const liveChannels = [...(instagram.status().configured && publicMediaReady ? ["instagram"] : []), ...(tiktok.status().configured && publicMediaReady && tiktokUrlOwnershipVerified ? ["tiktok"] : [])];
   const distribution = dependencies.distribution ?? new DistributionCenter(campaignStore, contentAssetStore, atlas.guardian, atlas.agentRuntime, atlas.permissions, liveChannels, publicMediaReady ? publicBaseUrl : "");
   const performanceStore = createSqliteStore<PerformanceRecord>(database, "performance_records"); const insightStore = createSqliteStore<LearningInsight>(database, "learning_insights");
   const learning = dependencies.learning ?? new LearningEngine(performanceStore, insightStore, campaignStore, atlas.guardian, atlas.agentRuntime, atlas.permissions, atlas.provider);
@@ -174,7 +175,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
       hotmartProduction: { ready: hotmartProduction.status().configured, state: hotmartProduction.status().authenticated ? "operational" : hotmartProduction.status().configured ? "configured-unverified" : "missing-credentials" },
       shopeeTracking: { ready: links.length > 0, state: links.length ? "operational" : "missing-affiliate-link", links: links.length, confirmedClicks: clicks.length },
       instagramPublishing: { ready: instagram.status().configured && publicMediaReady, state: !instagram.status().configured ? "missing-official-access-token" : !publicMediaReady ? "missing-public-https-url" : "configured-unverified" },
-      tiktokPublishing: { ready: tiktok.status().configured && publicMediaReady, state: !tiktok.status().configured ? "missing-official-access-token" : !publicMediaReady ? "missing-public-https-url" : "configured-unverified" },
+      tiktokPublishing: { ready: tiktok.status().configured && publicMediaReady && tiktokUrlOwnershipVerified, state: !tiktok.status().configured ? "missing-official-access-token" : !publicMediaReady ? "missing-public-https-url" : !tiktokUrlOwnershipVerified ? "missing-url-ownership-verification" : "configured-unverified" },
       imageGeneration: { ready: imageClient.status().configured, state: imageClient.status().configured ? "configured-unverified" : "missing-openai-api-key", model: imageClient.status().model },
     };
     return { readyForExternalPublishing: integrations.instagramPublishing.ready || integrations.tiktokPublishing.ready, integrations };
