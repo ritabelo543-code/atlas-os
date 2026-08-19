@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { ProjectService } from "./services/ProjectService.js";
 import { TaskService } from "./services/TaskService.js";
 import { createAtlasCore } from "./atlas.js";
@@ -117,7 +117,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
 
   app.get("/auth/registration-status", async () => {
     const admin = await auth.firstAdmin();
-    return { registrationOpen: admin ? registrationPolicy.enabledAfterAdmin === true : true, awaitingAdmin: !admin, restrictedToAdminEmail: !admin && Boolean(registrationPolicy.adminEmail) };
+    return { registrationOpen: admin ? registrationPolicy.enabledAfterAdmin === true : true, awaitingAdmin: !admin, restrictedToAdminEmail: !admin && Boolean(registrationPolicy.adminEmail), recoveryAvailable: Boolean(admin && registrationPolicy.adminEmail && process.env.ATLAS_ADMIN_RECOVERY_TOKEN) };
   });
   app.post<{ Body: { email: string; password: string; name: string } }>("/auth/register", async (request, reply) => {
     const admin = await auth.firstAdmin();
@@ -127,6 +127,15 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     try { const session = await auth.register(request.body.email, request.body.password, request.body.name); if (session.user.role === "admin") await Promise.all([projects.claimUnowned(session.user.id), tasks.claimUnowned(session.user.id)]); return reply.code(201).send(session); } catch (error) { return reply.code(400).send({ error: "AUTH_ERROR", message: error instanceof Error ? error.message : "Registration failed", statusCode: 400 }); }
   });
   app.post<{ Body: { email: string; password: string } }>("/auth/login", async (request, reply) => { try { return await auth.login(request.body.email, request.body.password); } catch { return reply.code(401).send({ error: "UNAUTHORIZED", message: "Invalid credentials", statusCode: 401 }); } });
+  app.post<{ Body: { email: string; password: string; recoveryCode: string } }>("/auth/recover", async (request, reply) => {
+    const configuredEmail = registrationPolicy.adminEmail;
+    const configuredCode = process.env.ATLAS_ADMIN_RECOVERY_TOKEN;
+    if (!configuredEmail || !configuredCode) return reply.code(404).send({ error: "NOT_FOUND", message: "Recovery is not available", statusCode: 404 });
+    const suppliedCode = request.body.recoveryCode ?? "";
+    const validCode = suppliedCode.length === configuredCode.length && timingSafeEqual(Buffer.from(suppliedCode), Buffer.from(configuredCode));
+    if (!validCode || request.body.email?.trim().toLowerCase() !== configuredEmail) return reply.code(401).send({ error: "RECOVERY_DENIED", message: "Invalid recovery details", statusCode: 401 });
+    try { return await auth.recoverAdmin(configuredEmail, request.body.password); } catch (error) { return reply.code(400).send({ error: "RECOVERY_ERROR", message: error instanceof Error ? error.message : "Recovery failed", statusCode: 400 }); }
+  });
   app.get("/auth/me", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ?? reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
 
   app.get("/atlas/status", async () => atlas.status());

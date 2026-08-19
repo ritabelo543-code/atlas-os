@@ -262,11 +262,25 @@ test("validation and not-found errors are consistent", async () => {
 
 test("production registration policy reserves the first admin and closes public signups", async () => {
   const app = await testApp([], [], new MockAiProvider(), undefined, "", { adminEmail: "owner@example.com", enabledAfterAdmin: false });
-  assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: true, awaitingAdmin: true, restrictedToAdminEmail: true });
+  assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: true, awaitingAdmin: true, restrictedToAdminEmail: true, recoveryAvailable: false });
   assert.equal((await app.inject({ method: "POST", url: "/auth/register", payload: { email: "intruder@example.com", password: "secure-password", name: "Intruder" } })).statusCode, 403);
   assert.equal((await app.inject({ method: "POST", url: "/auth/register", payload: { email: "OWNER@example.com", password: "secure-password", name: "Owner" } })).statusCode, 201);
-  assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: false, awaitingAdmin: false, restrictedToAdminEmail: false });
+  assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: false, awaitingAdmin: false, restrictedToAdminEmail: false, recoveryAvailable: false });
   assert.equal((await app.inject({ method: "POST", url: "/auth/register", payload: { email: "member@example.com", password: "secure-password", name: "Member" } })).statusCode, 403);
+});
+
+test("administrator recovery preserves the existing owner and rotates credentials", async () => {
+  const previous = process.env.ATLAS_ADMIN_RECOVERY_TOKEN; process.env.ATLAS_ADMIN_RECOVERY_TOKEN = "temporary-recovery-code";
+  try {
+    const app = await testApp([], [], new MockAiProvider(), undefined, "", { adminEmail: "owner@example.com", enabledAfterAdmin: false });
+    const created = await app.inject({ method: "POST", url: "/auth/register", payload: { email: "owner@example.com", password: "old-password", name: "Owner" } });
+    const ownerId = created.json().user.id;
+    assert.equal((await app.inject({ method: "POST", url: "/auth/recover", payload: { email: "owner@example.com", password: "new-password", recoveryCode: "wrong" } })).statusCode, 401);
+    const recovered = await app.inject({ method: "POST", url: "/auth/recover", payload: { email: "owner@example.com", password: "new-password", recoveryCode: "temporary-recovery-code" } });
+    assert.equal(recovered.statusCode, 200); assert.equal(recovered.json().user.id, ownerId); assert.equal(recovered.json().user.email, "owner@example.com");
+    assert.equal((await app.inject({ method: "POST", url: "/auth/login", payload: { email: "owner@example.com", password: "old-password" } })).statusCode, 401);
+    assert.equal((await app.inject({ method: "POST", url: "/auth/login", payload: { email: "owner@example.com", password: "new-password" } })).statusCode, 200);
+  } finally { if (previous === undefined) delete process.env.ATLAS_ADMIN_RECOVERY_TOKEN; else process.env.ATLAS_ADMIN_RECOVERY_TOKEN = previous; }
 });
 
 test("approved content can generate and serve a persisted real media asset", async () => {
