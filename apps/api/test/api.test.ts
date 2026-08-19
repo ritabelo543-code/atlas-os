@@ -266,6 +266,13 @@ test("TikTok OAuth callback is publicly reachable without exposing credentials",
   assert.deepEqual(response.json(), { status: "ready", provider: "tiktok", message: "TikTok OAuth callback is active. Start authorization from Radar de Escolhas." });
 });
 
+test("TikTok URL ownership signature is served at the exact verified prefix", async () => {
+  const response = await (await testApp()).inject({ method: "GET", url: "/integrations/tiktok/callback/tiktokZUTUUz5GNXVqHqCqbSQSroyxHl9mBXoK.txt" });
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["content-type"] ?? "", /^text\/plain/);
+  assert.equal(response.body, "tiktok-developers-site-verification=ZUTUUz5GNXVqHqCqbSQSroyxHl9mBXoK");
+});
+
 test("production registration policy reserves the first admin and closes public signups", async () => {
   const app = await testApp([], [], new MockAiProvider(), undefined, "", { adminEmail: "owner@example.com", enabledAfterAdmin: false });
   assert.deepEqual((await app.inject({ method: "GET", url: "/auth/registration-status" })).json(), { registrationOpen: true, awaitingAdmin: true, restrictedToAdminEmail: true, recoveryAvailable: false });

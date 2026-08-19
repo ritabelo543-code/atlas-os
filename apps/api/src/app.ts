@@ -121,6 +121,9 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     if (!request.query.code || !request.query.state) return reply.code(400).send({ status: "ready", provider: "tiktok", message: "TikTok OAuth callback is active. Start authorization from Radar de Escolhas." });
     return reply.code(501).send({ status: "token_exchange_pending", provider: "tiktok", message: "TikTok returned authorization successfully. Secure token exchange is not configured yet." });
   });
+  app.get("/integrations/tiktok/callback/tiktokZUTUUz5GNXVqHqCqbSQSroyxHl9mBXoK.txt", async (_request, reply) => {
+    return reply.type("text/plain; charset=utf-8").send("tiktok-developers-site-verification=ZUTUUz5GNXVqHqCqbSQSroyxHl9mBXoK");
+  });
 
   app.get("/auth/registration-status", async () => {
     const admin = await auth.firstAdmin();
