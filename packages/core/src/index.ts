@@ -44,7 +44,23 @@ export class MockAiProvider implements AiProvider {
 export class CompatibleAiProvider implements AiProvider {
   readonly mode = "live" as const;
   constructor(readonly name: string, readonly model: string, private readonly apiKey: string, private readonly baseUrl: string) {}
-  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: "Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array)." }, { role: "user", content: JSON.stringify({ mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }) }] }) }); if (!response.ok) throw new AiProviderError(`AI provider request failed (${response.status})`, response.status); const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; const parsed = JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as AiResult; if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new AiProviderError("AI provider returned an invalid response"); return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) }; }
+  async generate({ mission, knowledge, memory }: AiRequest): Promise<AiResult> { const parsed = await this.callJson<AiResult>("Return JSON with recommendation, rationale, confidence (0..1), nextSteps (string array).", { mission: { title: mission.title, objective: mission.objective, context: mission.context }, knowledge, memory }); if (!parsed.recommendation || !parsed.rationale || !Array.isArray(parsed.nextSteps) || typeof parsed.confidence !== "number") throw new AiProviderError("AI provider returned an invalid response"); return { ...parsed, confidence: Math.max(0, Math.min(1, parsed.confidence)) }; }
+  async generateContent(request: ContentAiRequest): Promise<ContentAiResult> {
+    const parsed = await this.callJson<ContentAiResult>("Você é um redator comercial responsável. Responda somente JSON com title, body, cta, variants (3 itens com title, hook, cta) e designBrief. Siga exatamente as instruções, escreva em português do Brasil, não invente benefícios e não faça promessas de renda ou resultado.", request);
+    if (!parsed.title?.trim() || !parsed.body?.trim() || !parsed.cta?.trim() || !Array.isArray(parsed.variants) || parsed.variants.length < 1 || parsed.variants.some((item) => !item.title?.trim() || !item.hook?.trim() || !item.cta?.trim())) throw new AiProviderError("AI provider returned invalid content");
+    return parsed;
+  }
+  async analyzeMarket(request: MarketAiRequest): Promise<MarketAiResult> {
+    const parsed = await this.callJson<MarketAiResult>("Responda somente JSON com signals (lista de objetos kind e direction) e rankingRationale. Use apenas as evidências fornecidas e diferencie fatos de estimativas.", request);
+    if (!Array.isArray(parsed.signals) || !parsed.rankingRationale?.trim()) throw new AiProviderError("AI provider returned invalid market analysis");
+    return parsed;
+  }
+  async summarizeInsight(request: LearningAiRequest): Promise<LearningAiResult> {
+    const parsed = await this.callJson<LearningAiResult>("Responda somente JSON com summary. Resuma os dados observados sem inventar causalidade.", request);
+    if (!parsed.summary?.trim()) throw new AiProviderError("AI provider returned invalid learning insight");
+    return parsed;
+  }
+  private async callJson<T>(system: string, payload: unknown): Promise<T> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(payload) }] }) }); if (!response.ok) throw new AiProviderError(`AI provider request failed (${response.status})`, response.status); const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; try { return JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as T; } catch { throw new AiProviderError("AI provider returned malformed JSON"); } }
 }
 
 export class KnowledgeEngine {
