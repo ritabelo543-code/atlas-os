@@ -114,10 +114,10 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     try {
       if (atlas.status().lifecycle !== "running") throw new Error("Atlas Core is not running");
       if (!checkSqliteHealth(database)) throw new Error("SQLite integrity check failed");
-      return { status: "ok", service: "atlas-api", version: "1.0.2", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
+      return { status: "ok", service: "atlas-api", version: "1.0.3", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "ok" };
     } catch (error) {
       app.log.error({ err: error }, "health storage check failed");
-      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "1.0.2", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
+      return reply.code(503).send({ status: "degraded", service: "atlas-api", version: "1.0.3", timestamp: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()), storage: "error" });
     }
   });
 

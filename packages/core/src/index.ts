@@ -60,7 +60,18 @@ export class CompatibleAiProvider implements AiProvider {
     if (!parsed.summary?.trim()) throw new AiProviderError("AI provider returned invalid learning insight");
     return parsed;
   }
-  private async callJson<T>(system: string, payload: unknown): Promise<T> { const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` }, body: JSON.stringify({ model: this.model, response_format: { type: "json_object" }, messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(payload) }] }) }); if (!response.ok) { const providerBody = (await response.text()).replace(this.apiKey, "[redacted]").slice(0, 1000); throw new AiProviderError(`AI provider request failed (${response.status}): ${providerBody}`, response.status); } const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> }; try { return JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as T; } catch { throw new AiProviderError("AI provider returned malformed JSON"); } }
+  private async callJson<T>(system: string, payload: unknown): Promise<T> {
+    const url = `${this.baseUrl.replace(/\/$/, "")}/chat/completions`;
+    const headers = { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` };
+    const messages = [{ role: "system", content: system }, { role: "user", content: JSON.stringify(payload) }];
+    const request = (structured: boolean) => fetch(url, { method: "POST", headers, body: JSON.stringify({ model: this.model, ...(structured ? { response_format: { type: "json_object" } } : {}), messages }) });
+    let response = await request(true);
+    let providerBody = response.ok ? "" : (await response.text()).replace(this.apiKey, "[redacted]").slice(0, 1000);
+    if (response.status === 400 && providerBody.includes("response_format") && providerBody.includes("not supported")) { response = await request(false); providerBody = response.ok ? "" : (await response.text()).replace(this.apiKey, "[redacted]").slice(0, 1000); }
+    if (!response.ok) throw new AiProviderError(`AI provider request failed (${response.status}): ${providerBody}`, response.status);
+    const body = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    try { return JSON.parse(body.choices?.[0]?.message?.content ?? "{}") as T; } catch { throw new AiProviderError("AI provider returned malformed JSON"); }
+  }
 }
 
 export class KnowledgeEngine {

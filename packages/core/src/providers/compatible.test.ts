@@ -19,3 +19,21 @@ test("CompatibleAiProvider generates structured commercial content", async () =>
     assert.match(requestBody, /Três usos práticos/);
   } finally { globalThis.fetch = previousFetch; }
 });
+
+test("CompatibleAiProvider retries without response_format when the model does not support it", async () => {
+  const previousFetch = globalThis.fetch;
+  const bodies: string[] = [];
+  globalThis.fetch = async (_input, init) => {
+    const body = String(init?.body ?? "");
+    bodies.push(body);
+    if (bodies.length === 1) return new Response(JSON.stringify({ error: { message: "Invalid parameter: 'response_format' is not supported with this model." } }), { status: 400 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ summary: "Insight baseado nos dados observados." }) } }] }), { status: 200 });
+  };
+  try {
+    const provider = new CompatibleAiProvider("openai", "model", "secret", "https://api.example/v1");
+    const result = await provider.summarizeInsight({ winner: {} as never, recordCount: 1, recommendation: "Repetir o teste" });
+    assert.equal(result.summary, "Insight baseado nos dados observados.");
+    assert.match(bodies[0], /response_format/);
+    assert.doesNotMatch(bodies[1], /response_format/);
+  } finally { globalThis.fetch = previousFetch; }
+});
