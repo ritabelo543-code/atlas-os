@@ -14,7 +14,7 @@ export class ContentStudio {
       ["seo", "SEO Agent", "Aplica palavras-chave e intenção de busca"],
       ["content-reviewer", "Content Review Agent", "Revisa clareza, promessa e rastreabilidade"],
     ] as const) {
-      permissions.grant(`agent:${id}`, ["content.plan", "content.generate", "content.review"]);
+      permissions.grant(`agent:${id}`, ["content.plan", "content.generate", "content.review", "content.edit"]);
       if (!runtime.listAgents().some((agent) => agent.id === id)) runtime.register({ id, name, role, status: "registered", permissions: permissions.list(`agent:${id}`) });
       runtime.start(id);
     }
@@ -63,6 +63,15 @@ export class ContentStudio {
     const assets = await this.stores.assets.load(); const asset = assets.find((item) => item.id === id && item.ownerId === ownerId); if (!asset) return undefined;
     asset.status = status; asset.reviewNotes = notes.trim(); asset.reviewedAt = new Date().toISOString(); asset.updatedAt = asset.reviewedAt; await this.stores.assets.save(assets);
     await this.guardian.record("content-studio", "content.asset.review", { ownerId, assetId: asset.id, status, notes: asset.reviewNotes }, "success"); return asset;
+  }
+  async edit(ownerId: string, id: string, input: { title?: string; body?: string; cta?: string }): Promise<ContentAsset | undefined> {
+    this.permissions.require("agent:content-reviewer", "content.edit");
+    const assets = await this.stores.assets.load(); const asset = assets.find((item) => item.id === id && item.ownerId === ownerId); if (!asset) return undefined;
+    if (asset.status !== "in_review") throw new Error("Only content in review can be edited");
+    if (input.title !== undefined) asset.title = input.title.trim(); if (input.body !== undefined) asset.body = input.body.trim(); if (input.cta !== undefined) asset.cta = input.cta.trim();
+    if (!asset.title || !asset.body || !asset.cta) throw new Error("Title, body and CTA cannot be empty");
+    asset.updatedAt = new Date().toISOString(); await this.stores.assets.save(assets);
+    await this.guardian.record("content-studio", "content.asset.edit", { ownerId, assetId: asset.id }, "success"); return asset;
   }
   async listPlans(ownerId: string) { return (await this.stores.plans.load()).filter((item) => item.ownerId === ownerId); }
   async listAssets(ownerId: string) { return (await this.stores.assets.load()).filter((item) => item.ownerId === ownerId); }
