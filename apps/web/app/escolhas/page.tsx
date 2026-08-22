@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./escolhas.css";
+import "./cover.css";
 
 export const metadata: Metadata = {
   title: "Escolhas do Radar | Radar de Escolhas",
@@ -38,10 +39,11 @@ export default function EscolhasPage() {
       <section className="choices-list" aria-label="Produtos recomendados">
         {products.map((product) => (
           <article className="choice-card" key={product.title}>
-            <div className="choice-visual" aria-hidden="true">
-              <span className="choice-spark">✦</span>
-              <span className="choice-monogram">RF</span>
-              <small>UNHAS EM FIBRA</small>
+            <div className="choice-visual">
+              <img
+                src="/products/alongamento-unhas-fibras.png"
+                alt="Curso de Alongamento de Unhas em Fibras"
+              />
             </div>
             <div className="choice-copy">
               <span className="choice-category">{product.category}</span>
