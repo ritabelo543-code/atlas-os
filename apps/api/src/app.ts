@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
-import { AiProviderError, CompanyOrchestrator, ContentStudio, DistributionCenter, GitHubPlugin, LearningEngine, MarketIntelligence, PluginRuntime, ScaleEngine, type AtlasCore } from "@atlas/core";
-import type { AffiliateOffer, CampaignClick, CompanyCycle, ContentAsset, ContentPlan, CreateContentPlanInput, CreateDistributionInput, CreateMarketResearchInput, CreateMissionInput, CreatePerformanceInput, CreateProjectInput, CreateScalePolicyInput, CreateScaleProposalInput, CreateTaskInput, DistributionCampaign, GenerateContentInput, HealthResponse, LearningInsight, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, PerformanceRecord, Project, ScalePolicy, ScaleProposal, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
+import { AiProviderError, AutonomyEngine, CompanyOrchestrator, ContentStudio, DistributionCenter, GitHubPlugin, LearningEngine, MarketIntelligence, PluginRuntime, ScaleEngine, type AtlasCore } from "@atlas/core";
+import type { AffiliateOffer, AutonomyJob, AutonomyJobKind, CampaignClick, CompanyCycle, ContentAsset, ContentPlan, CreateContentPlanInput, CreateDistributionInput, CreateMarketResearchInput, CreateMissionInput, CreatePerformanceInput, CreateProjectInput, CreateScalePolicyInput, CreateScaleProposalInput, CreateTaskInput, DistributionCampaign, GenerateContentInput, HealthResponse, LearningInsight, MarketEvidence, MarketOpportunity, MarketResearch, MarketSignal, PerformanceRecord, Project, ScalePolicy, ScaleProposal, Task, UpdateProjectInput, UpdateTaskInput } from "@atlas/types";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -30,7 +30,7 @@ const taskBody = { type: "object", additionalProperties: false, required: ["titl
 const taskPatch = { type: "object", additionalProperties: false, minProperties: 1, properties: { ...taskBody.properties, completed: { type: "boolean" } } } as const;
 const missionBody = { type: "object", additionalProperties: false, required: ["title", "objective"], properties: { title: { type: "string", minLength: 1, maxLength: 160, pattern: "\\S" }, objective: { type: "string", minLength: 10, maxLength: 2000, pattern: "\\S" }, context: { type: "string", maxLength: 5000 } } } as const;
 
-export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; content?: ContentStudio; distribution?: DistributionCenter; learning?: LearningEngine; scale?: ScaleEngine; company?: CompanyOrchestrator; hotmartSandbox?: HotmartClient; hotmartProduction?: HotmartClient; imageClient?: OpenAIImageClient; registrationPolicy?: { adminEmail?: string; enabledAfterAdmin?: boolean }; logger?: boolean };
+export type AppDependencies = { projects?: ProjectService; tasks?: TaskService; atlas?: AtlasCore; auth?: AuthService; market?: MarketIntelligence; content?: ContentStudio; distribution?: DistributionCenter; learning?: LearningEngine; scale?: ScaleEngine; company?: CompanyOrchestrator; autonomy?: AutonomyEngine; hotmartSandbox?: HotmartClient; hotmartProduction?: HotmartClient; imageClient?: OpenAIImageClient; registrationPolicy?: { adminEmail?: string; enabledAfterAdmin?: boolean }; logger?: boolean };
 
 export async function buildApp(dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: dependencies.logger ?? true, bodyLimit: 64 * 1024 });
@@ -68,6 +68,9 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const scaleProposalStore = createSqliteStore<ScaleProposal>(database, "scale_proposals");
   const scale = dependencies.scale ?? new ScaleEngine(createSqliteStore<ScalePolicy>(database, "scale_policies"), scaleProposalStore, insightStore, performanceStore, atlas.guardian, atlas.agentRuntime, atlas.permissions);
   const company = dependencies.company ?? new CompanyOrchestrator({ cycles: createSqliteStore<CompanyCycle>(database, "company_cycles"), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: scaleProposalStore }, atlas.guardian, atlas.agentRuntime, atlas.permissions);
+  const autonomyJobs = createSqliteStore<AutonomyJob>(database, "autonomy_jobs");
+  const autonomy = dependencies.autonomy ?? new AutonomyEngine(autonomyJobs, process.env.RAILWAY_REPLICA_ID ?? `api-${process.pid}`);
+  const autonomyEnabled = process.env.ATLAS_AUTONOMY_ENABLED === "true";
   const hotmartSandbox = dependencies.hotmartSandbox ?? HotmartClient.fromEnvironment("sandbox");
   const hotmartProduction = dependencies.hotmartProduction ?? HotmartClient.fromEnvironment("production");
   type HotmartRecordMeta = { ownerId: string; environment: string; source: "hotmart-sandbox" | "hotmart-production"; dataKind: "simulated" | "confirmed"; syncedAt: string };
@@ -95,7 +98,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   await plugins.load("github");
   await atlas.start();
 
-  app.addHook("onClose", async () => { tiktokOAuthStates.close?.(); tiktokOAuthTokens.close?.(); campaignClicks.close?.(); hotmartClicks.close?.(); hotmartLinks.close?.(); mediaAssets.close?.(); shopeeClicks.close?.(); shopeeLinks.close?.(); hotmartProducts.close?.(); hotmartOffers.close?.(); hotmartSales.close?.(); company.close(); scale.close(); learning.close(); distribution.close(); content.close(); market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
+  app.addHook("onClose", async () => { autonomyJobs.close?.(); tiktokOAuthStates.close?.(); tiktokOAuthTokens.close?.(); campaignClicks.close?.(); hotmartClicks.close?.(); hotmartLinks.close?.(); mediaAssets.close?.(); shopeeClicks.close?.(); shopeeLinks.close?.(); hotmartProducts.close?.(); hotmartOffers.close?.(); hotmartSales.close?.(); company.close(); scale.close(); learning.close(); distribution.close(); content.close(); market.close(); await atlas.stop(); auth.close(); projects.close(); tasks.close(); });
   const allowedOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
   await app.register(cors, { origin: allowedOrigin, methods: ["GET", "POST", "PATCH", "DELETE"] });
 
@@ -140,6 +143,13 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   app.get("/auth/registration-status", async () => {
     const admin = await auth.firstAdmin();
     return { registrationOpen: admin ? registrationPolicy.enabledAfterAdmin === true : true, awaitingAdmin: !admin, restrictedToAdminEmail: !admin && Boolean(registrationPolicy.adminEmail), recoveryAvailable: Boolean(admin && registrationPolicy.adminEmail && process.env.ATLAS_ADMIN_RECOVERY_TOKEN) };
+  });
+  app.get("/autonomy/status", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? autonomy.status(autonomyEnabled) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.get("/autonomy/jobs", async (request, reply) => { const user = authenticate(request.headers.authorization); return user ? (await autonomyJobs.load()).filter((item) => item.ownerId === user.id) : reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 }); });
+  app.post<{ Body: { kind: AutonomyJobKind; idempotencyKey: string; payload?: Record<string, unknown>; priority?: number; runAt?: string } }>("/autonomy/jobs", async (request, reply) => {
+    const user = authenticate(request.headers.authorization); if (!user) return reply.code(401).send({ error: "UNAUTHORIZED", message: "Authentication required", statusCode: 401 });
+    const body = request.body; if (!body?.kind || !body.idempotencyKey?.trim()) return reply.code(400).send({ error: "VALIDATION_ERROR", message: "Job kind and idempotency key are required", statusCode: 400 });
+    return reply.code(201).send(await autonomy.enqueue({ ownerId: user.id, kind: body.kind, idempotencyKey: body.idempotencyKey.trim(), payload: body.payload, priority: body.priority, runAt: body.runAt }));
   });
   app.post<{ Body: { email: string; password: string; name: string } }>("/auth/register", async (request, reply) => {
     const admin = await auth.firstAdmin();

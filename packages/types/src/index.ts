@@ -86,7 +86,7 @@ export type MarketResearch = { id: string; ownerId: string; query: string; marke
 export type CreateMarketResearchInput = { query: string; market: string; niche: string; audience: string; painOrDesire: string; channels: string[]; evidence: Array<Omit<MarketEvidence, "id">>; offers: Array<Pick<AffiliateOffer, "name" | "provider" | "url" | "commission" | "commissionKind" | "notes">>; metrics: Partial<OpportunityScoreComponents>; dataKind: EvidenceValueKind };
 
 export type FunnelStage = "awareness" | "consideration" | "conversion";
-export type ContentChannel = "blog" | "email" | "instagram" | "tiktok" | "youtube" | "pinterest" | "landing-page" | "other";
+export type ContentChannel = "blog" | "email" | "instagram" | "tiktok" | "youtube" | "pinterest" | "telegram" | "whatsapp" | "landing-page" | "other";
 export type ContentFormat = "article" | "social-post" | "email" | "video-script" | "landing-page" | "creative-brief";
 export type ContentStatus = "draft" | "in_review" | "approved" | "rejected";
 export type ContentPlan = { id: string; ownerId: string; opportunityId: string; offerId?: string; audience: string; painOrDesire: string; objective: string; funnelStage: FunnelStage; channels: ContentChannel[]; keywords: string[]; tone: string; status: "active" | "completed"; createdAt: string; updatedAt: string };
@@ -115,3 +115,25 @@ export type CreateScaleProposalInput = { policyId: string; insightId: string; cu
 export type CompanyStageName = "research" | "content" | "distribution" | "measurement" | "learning" | "scaling";
 export type CompanyStage = { name: CompanyStageName; status: "ready" | "blocked" | "completed"; count: number; detail: string };
 export type CompanyCycle = { id: string; ownerId: string; mode: "safe"; status: "assessed" | "blocked" | "ready"; stages: CompanyStage[]; nextAction: string; blockers: string[]; externalPublishingEnabled: false; financialExecutionEnabled: false; createdAt: string };
+
+export const AFFILIATE_PLATFORMS = ["hotmart", "shopee", "mercado_livre", "tiktok_shop", "other"] as const;
+export type AffiliatePlatform = (typeof AFFILIATE_PLATFORMS)[number];
+export const AUTONOMY_JOB_KINDS = ["discover_offers", "validate_offer", "prepare_content", "publish_content", "refresh_metrics", "expire_offer"] as const;
+export type AutonomyJobKind = (typeof AUTONOMY_JOB_KINDS)[number];
+export type AutonomyJobStatus = "pending" | "running" | "retry" | "completed" | "dead_letter" | "cancelled";
+export type AutonomyJob = {
+  id: string; ownerId: string; kind: AutonomyJobKind; status: AutonomyJobStatus;
+  idempotencyKey: string; payload: Record<string, unknown>; priority: number;
+  attempts: number; maxAttempts: number; runAt: string; leaseOwner?: string;
+  leaseExpiresAt?: string; lastError?: string; createdAt: string; updatedAt: string;
+  completedAt?: string;
+};
+export type AutonomyPolicy = {
+  ownerId: string; enabled: boolean; timezone: string; quietHoursStart: string; quietHoursEnd: string;
+  maxPostsPerChannelPerDay: number; duplicateCooldownHours: number; requireLicensedMedia: boolean;
+  requirePriceAndAvailabilityCheck: boolean; pauseOnFailureRatePercent: number; updatedAt: string;
+};
+export type AutonomyStatus = {
+  enabled: boolean; workerId: string; heartbeatAt: string | null;
+  pending: number; running: number; retrying: number; deadLetter: number;
+};

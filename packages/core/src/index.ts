@@ -18,6 +18,7 @@ export { DistributionCenter } from "./distribution.js";
 export { LearningEngine } from "./learning.js";
 export { ScaleEngine } from "./scale.js";
 export { CompanyOrchestrator, type CompanyStores } from "./company.js";
+export { AutonomyEngine, DEFAULT_AUTONOMY_POLICY, type AutonomyHandler, type EnqueueAutonomyJob } from "./autonomy.js";
 
 export interface CollectionStore<T> { load(): Promise<T[]>; save(items: T[]): Promise<void>; close?(): void }
 export type AtlasEventMap = { "mission.created": Mission; "mission.completed": Mission; "decision.created": Decision; "knowledge.created": KnowledgeItem };

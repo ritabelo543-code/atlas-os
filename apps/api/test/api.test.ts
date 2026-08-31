@@ -260,6 +260,20 @@ test("validation and not-found errors are consistent", async () => {
   assert.equal(missing.json().error, "NOT_FOUND");
 });
 
+test("autonomy control plane queues idempotent work and isolates it behind authentication", async () => {
+  const app = await testApp();
+  assert.equal((await app.inject({ method: "GET", url: "/autonomy/status" })).statusCode, 401);
+  const headers = await authHeaders(app);
+  const payload = { kind: "discover_offers", idempotencyKey: "radar:discovery:2026-08-31", runAt: "2026-08-31T12:00:00Z" };
+  const first = await app.inject({ method: "POST", url: "/autonomy/jobs", headers, payload });
+  const duplicate = await app.inject({ method: "POST", url: "/autonomy/jobs", headers, payload });
+  assert.equal(first.statusCode, 201); assert.equal(first.json().id, duplicate.json().id);
+  const jobs = await app.inject({ method: "GET", url: "/autonomy/jobs", headers });
+  assert.equal(jobs.statusCode, 200); assert.equal(jobs.json().length, 1);
+  const status = await app.inject({ method: "GET", url: "/autonomy/status", headers });
+  assert.equal(status.statusCode, 200); assert.equal(status.json().pending, 1); assert.equal(status.json().enabled, false);
+});
+
 test("TikTok OAuth callback is publicly reachable without exposing credentials", async () => {
   const response = await (await testApp()).inject({ method: "GET", url: "/integrations/tiktok/callback" });
   assert.equal(response.statusCode, 400);
