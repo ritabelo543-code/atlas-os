@@ -23,6 +23,7 @@ import { TikTokContentClient } from "./integrations/TikTokContentClient.js";
 import { TikTokOAuthService, type StoredTikTokToken, type TikTokOAuthState } from "./integrations/TikTokOAuthService.js";
 import { createHotmartLink, type HotmartAffiliateLink, type HotmartClick } from "./integrations/HotmartLinks.js";
 import { TelegramBotClient } from "./integrations/TelegramBotClient.js";
+import { buildDefaultAutonomyHandlers } from "./autonomy/defaultHandlers.js";
 
 const idParams = { type: "object", additionalProperties: false, required: ["id"], properties: { id: { type: "string", minLength: 1, maxLength: 100 } } } as const;
 const nullableDate = { anyOf: [{ type: "string", format: "date" }, { type: "null" }] } as const;
@@ -76,7 +77,6 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const autonomyPolicies = new AutonomyPolicyCenter(createSqliteStore<AutonomyPolicy>(database, "autonomy_policies"));
   const autonomyEnabled = process.env.ATLAS_AUTONOMY_ENABLED === "true";
   const workerSecret = process.env.ATLAS_WORKER_SECRET?.trim();
-  const autonomyHandlers = dependencies.autonomyHandlers ?? {};
   const hotmartSandbox = dependencies.hotmartSandbox ?? HotmartClient.fromEnvironment("sandbox");
   const hotmartProduction = dependencies.hotmartProduction ?? HotmartClient.fromEnvironment("production");
   type HotmartRecordMeta = { ownerId: string; environment: string; source: "hotmart-sandbox" | "hotmart-production"; dataKind: "simulated" | "confirmed"; syncedAt: string };
@@ -97,6 +97,7 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
   const mediaDirectory = resolve(dirname(database), "media");
   const existingAdmin = await auth.firstAdmin(); if (existingAdmin) await Promise.all([projects.claimUnowned(existingAdmin.id), tasks.claimUnowned(existingAdmin.id)]);
   const authenticate = (authorization?: string) => { try { const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : ""; return token ? auth.verify(token) : null; } catch { return null; } };
+  const autonomyHandlers = dependencies.autonomyHandlers ?? buildDefaultAutonomyHandlers({ autonomy, market, content });
   atlas.permissions.grant("plugin:github", ["network.github.read"]);
   const plugins = new PluginRuntime(atlas.permissions);
   const github = new GitHubPlugin(process.env.GITHUB_TOKEN);
