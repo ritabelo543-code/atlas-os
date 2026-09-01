@@ -175,12 +175,15 @@ export async function buildApp(dependencies: AppDependencies = {}): Promise<Fast
     if (!authorizeWorker(request.headers["x-atlas-worker-secret"])) return reply.code(401).send({ error: "UNAUTHORIZED_WORKER", message: "Worker authentication required", statusCode: 401 });
     if (!autonomyEnabled) return reply.code(409).send({ error: "AUTONOMY_DISABLED", message: "Autonomy is disabled", statusCode: 409 });
     const admin = await auth.firstAdmin(); if (!admin) return reply.code(409).send({ error: "ADMIN_REQUIRED", message: "Initial administrator is not registered", statusCode: 409 });
+    const policy = await autonomyPolicies.get(admin.id); if (!policy.enabled) return reply.code(409).send({ error: "AUTONOMY_POLICY_DISABLED", message: "Organization autonomy policy is disabled", statusCode: 409 });
     const date = new Date().toISOString().slice(0, 13);
     return reply.code(201).send(await autonomy.enqueue({ ownerId: admin.id, kind: "discover_offers", idempotencyKey: `discover:${admin.id}:${date}`, priority: 10 }));
   });
   app.post("/internal/autonomy/tick", async (request, reply) => {
     if (!authorizeWorker(request.headers["x-atlas-worker-secret"])) return reply.code(401).send({ error: "UNAUTHORIZED_WORKER", message: "Worker authentication required", statusCode: 401 });
     if (!autonomyEnabled) return reply.code(409).send({ error: "AUTONOMY_DISABLED", message: "Autonomy is disabled", statusCode: 409 });
+    const admin = await auth.firstAdmin(); if (!admin) return reply.code(409).send({ error: "ADMIN_REQUIRED", message: "Initial administrator is not registered", statusCode: 409 });
+    const policy = await autonomyPolicies.get(admin.id); if (!policy.enabled) return reply.code(409).send({ error: "AUTONOMY_POLICY_DISABLED", message: "Organization autonomy policy is disabled", statusCode: 409 });
     const job = await autonomy.runOnce(autonomyHandlers);
     return job ? reply.send(job) : reply.code(204).send();
   });
