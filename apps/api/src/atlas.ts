@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
-import { createSqliteStore } from "./lib/sqlite.js";
+import { createCollectionStore as createSqliteStore } from "./lib/database.js";
 
 export function createAtlasCore(): AtlasCore {
   const provider = resolveAiProvider({ provider: process.env.AI_PROVIDER, model: process.env.AI_MODEL, apiKey: process.env.AI_API_KEY, baseUrl: process.env.AI_BASE_URL }, new MockAiProvider(), (name, model, key, baseUrl) => new CompatibleAiProvider(name, model, key, baseUrl));

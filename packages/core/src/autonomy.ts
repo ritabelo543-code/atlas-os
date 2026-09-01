@@ -80,6 +80,10 @@ export class AutonomyEngine {
       deadLetter: items.filter((item) => item.status === "dead_letter").length };
   }
 
+  async list(ownerId: string): Promise<AutonomyJob[]> {
+    return (await this.jobs.load()).filter((item) => item.ownerId === ownerId);
+  }
+
   private async claim(now: Date): Promise<AutonomyJob | undefined> {
     await this.recoverExpiredLeases(now);
     const items = await this.jobs.load();
@@ -112,6 +116,31 @@ export class AutonomyEngine {
   }
 }
 
+export class AutonomyPolicyCenter {
+  constructor(private readonly policies: CollectionStore<AutonomyPolicy>) {}
+  async get(ownerId: string): Promise<AutonomyPolicy> {
+    const existing = (await this.policies.load()).find((item) => item.ownerId === ownerId);
+    return existing ?? { ownerId, ...DEFAULT_AUTONOMY_POLICY, updatedAt: new Date().toISOString() };
+  }
+  async update(ownerId: string, patch: Partial<Omit<AutonomyPolicy, "ownerId" | "updatedAt">>): Promise<AutonomyPolicy> {
+    const items = await this.policies.load(); const previous = await this.get(ownerId);
+    const policy: AutonomyPolicy = { ...previous, ...patch, ownerId, updatedAt: new Date().toISOString() };
+    validatePolicy(policy);
+    const index = items.findIndex((item) => item.ownerId === ownerId);
+    if (index >= 0) items[index] = policy; else items.unshift(policy);
+    await this.policies.save(items); return policy;
+  }
+  close() { this.policies.close?.(); }
+}
+
 function retryDelay(attempt: number): number {
   return Math.min(60 * 60_000, 30_000 * 2 ** Math.max(0, attempt - 1));
+}
+
+function validatePolicy(policy: AutonomyPolicy): void {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(policy.quietHoursStart) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(policy.quietHoursEnd)) throw new Error("Quiet hours must use HH:MM");
+  if (!Number.isInteger(policy.maxPostsPerChannelPerDay) || policy.maxPostsPerChannelPerDay < 1 || policy.maxPostsPerChannelPerDay > 50) throw new Error("Daily channel limit must be between 1 and 50");
+  if (policy.duplicateCooldownHours < 1 || policy.duplicateCooldownHours > 8760) throw new Error("Duplicate cooldown must be between 1 and 8760 hours");
+  if (policy.pauseOnFailureRatePercent < 1 || policy.pauseOnFailureRatePercent > 100) throw new Error("Failure rate must be between 1 and 100");
+  try { new Intl.DateTimeFormat("pt-BR", { timeZone: policy.timezone }).format(); } catch { throw new Error("Timezone is invalid"); }
 }

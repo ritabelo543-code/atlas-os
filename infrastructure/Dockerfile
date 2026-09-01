@@ -39,6 +39,15 @@ USER node
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
 
-# Railway builds the final stage. Set SERVICE_TARGET=api on the API service;
+FROM node:22-bookworm-slim AS worker
+ENV NODE_ENV=production
+WORKDIR /atlas
+COPY --from=build /atlas/node_modules ./node_modules
+COPY --from=build /atlas/apps/worker/package.json ./apps/worker/package.json
+COPY --from=build /atlas/apps/worker/dist ./apps/worker/dist
+USER node
+CMD ["node", "apps/worker/dist/worker.js"]
+
+# Railway builds the final stage. Set SERVICE_TARGET=api or worker on those services;
 # the default remains web for the public interface and legal pages.
 FROM ${SERVICE_TARGET} AS runtime

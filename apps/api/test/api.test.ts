@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import type { CompanyCycle, ContentAsset, ContentPlan, DistributionCampaign, LearningInsight, MarketOpportunity, PerformanceRecord, Project, ScalePolicy, ScaleProposal, Task } from "@atlas/types";
+import type { AutonomyJob, CompanyCycle, ContentAsset, ContentPlan, DistributionCampaign, LearningInsight, MarketOpportunity, PerformanceRecord, Project, ScalePolicy, ScaleProposal, Task } from "@atlas/types";
 import type { AuditEntry, Decision, KnowledgeItem, MemoryItem, Mission } from "@atlas/types";
-import { AgentRuntime, AiProviderError, AtlasCore, CompanyOrchestrator, ContentStudio, DistributionCenter, Guardian, LearningEngine, MarketIntelligence, MockAiProvider, PermissionManager, ScaleEngine, type AiProvider } from "@atlas/core";
+import { AgentRuntime, AiProviderError, AtlasCore, AutonomyEngine, CompanyOrchestrator, ContentStudio, DistributionCenter, Guardian, LearningEngine, MarketIntelligence, MockAiProvider, PermissionManager, ScaleEngine, type AiProvider } from "@atlas/core";
 import { buildApp } from "../src/app.js";
 import type { JsonStore } from "../src/lib/storage.js";
 import { ProjectRepository } from "../src/repositories/ProjectRepository.js";
@@ -26,7 +26,8 @@ async function testApp(initialProjects: Project[] = [], initialTasks: Task[] = [
   const market = new MarketIntelligence({ research: memoryStore(), evidence: memoryStore(), signals: memoryStore(), offers: memoryStore(), opportunities: opportunityStore }, guardian, runtime, permissions, aiProvider);
   const contentAssetStore = memoryStore<ContentAsset>(); const content = new ContentStudio({ plans: memoryStore<ContentPlan>(), assets: contentAssetStore }, opportunityStore, guardian, runtime, permissions, aiProvider);
   const campaignStore = memoryStore<DistributionCampaign>(); const distribution = new DistributionCenter(campaignStore, contentAssetStore, guardian, runtime, permissions, [], trackingBaseUrl); const performanceStore = memoryStore<PerformanceRecord>(), insightStore = memoryStore<LearningInsight>(); const learning = new LearningEngine(performanceStore, insightStore, campaignStore, guardian, runtime, permissions, aiProvider); const proposalStore = memoryStore<ScaleProposal>(); const scale = new ScaleEngine(memoryStore<ScalePolicy>(), proposalStore, insightStore, performanceStore, guardian, runtime, permissions); const company = new CompanyOrchestrator({ cycles: memoryStore<CompanyCycle>(), opportunities: opportunityStore, assets: contentAssetStore, campaigns: campaignStore, performance: performanceStore, insights: insightStore, proposals: proposalStore }, guardian, runtime, permissions);
-  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, imageClient, registrationPolicy, logger: false });
+  const autonomy = new AutonomyEngine(memoryStore<AutonomyJob>(), "test-worker");
+  const app = await buildApp({ projects, tasks, atlas, auth, market, content, distribution, learning, scale, company, autonomy, imageClient, registrationPolicy, logger: false });
   apps.push(app);
   return app;
 }
@@ -80,7 +81,7 @@ test("agent, plugin and performance operation endpoints expose v0.3 runtime", as
   assert.equal((await app.inject({ method: "GET", url: "/atlas/agents" })).json()[0].name, "Atlas Executive Agent");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/plugins" })).json()[0].status, "loaded");
   assert.equal((await app.inject({ method: "GET", url: "/atlas/performance", headers })).json().executions, 0);
-  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "1.0.0");
+  assert.equal((await app.inject({ method: "GET", url: "/atlas/status" })).json().version, "2.0.0-alpha.1");
 });
 
 test("market research ranks traceable simulated opportunities and isolates users", async () => {

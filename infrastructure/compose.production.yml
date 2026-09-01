@@ -17,6 +17,8 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:?Configure the public Web URL}
       ATLAS_AUTO_PUBLISH: "false"
       ATLAS_AUTO_SCALE: "false"
+      ATLAS_AUTONOMY_ENABLED: "false"
+      ATLAS_WORKER_SECRET: ${ATLAS_WORKER_SECRET:?Configure an independent worker secret}
     volumes:
       - atlas-data:/data
     ports:
@@ -42,6 +44,22 @@ services:
       HOSTNAME: 0.0.0.0
     ports:
       - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile
+      target: worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      ATLAS_API_INTERNAL_URL: http://api:3333
+      ATLAS_WORKER_SECRET: ${ATLAS_WORKER_SECRET:?Configure an independent worker secret}
+      ATLAS_WORKER_TICK_MS: 5000
+      ATLAS_SCHEDULER_INTERVAL_MS: 900000
     depends_on:
       api:
         condition: service_healthy
