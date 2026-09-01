@@ -21,4 +21,4 @@ export default function OffersPage() {
 }
 function Metric({ value, label }: { value: number; label: string }) { return <article><strong>{value}</strong><span>{label}</span></article>; }
 function labelJob(kind: AutonomyJob["kind"]) { return ({ discover_offers: "Descobrir ofertas", validate_offer: "Validar produto", prepare_content: "Preparar conteúdo", publish_content: "Publicar conteúdo", refresh_metrics: "Atualizar resultados", expire_offer: "Encerrar oferta" } as const)[kind]; }
-function channelLabel(channel: ContentAsset["channel"]) { return ({ instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", pinterest: "Pinterest", telegram: "Telegram", whatsapp: "WhatsApp", blog: "Blog", email: "E-mail", "landing-page": "Página" } as const)[channel] ?? channel; }
+function channelLabel(channel: ContentAsset["channel"]) { const labels: Partial<Record<ContentAsset["channel"], string>> = { instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", pinterest: "Pinterest", telegram: "Telegram", whatsapp: "WhatsApp", blog: "Blog", email: "E-mail", "landing-page": "Página" }; return labels[channel] ?? channel; }
